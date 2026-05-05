@@ -58,6 +58,69 @@ def main_menu():
 def data_structures_module():
     """Stack, queue, linked list, BST visualization"""
     # TODO: Implement data structures visualization
+
+def data_structures_module():
+    """Data Structures submenu that imports and runs 4 visualiser files"""
+
+    # Import visualisers from your 4 Python files
+    from stack_visualizer import stack_visualiser
+    from queue_visualiser import queue_visualiser
+    from linked_list_visualiser import linked_list_visualiser
+    from bst_visualiser import bst_visualiser
+
+    running = True
+
+    while running:
+        screen.fill((220, 220, 255))
+        draw_text("DATA STRUCTURES MODULE (ESC to return)", (180, 40))
+
+        # Submenu buttons
+        buttons = {
+            "Stack": pygame.Rect(300, 150, 200, 50),
+            "Queue": pygame.Rect(300, 230, 200, 50),
+            "Linked List": pygame.Rect(300, 310, 200, 50),
+            "BST": pygame.Rect(300, 390, 200, 50),
+        }
+
+        # Draw buttons
+        for text, rect in buttons.items():
+            pygame.draw.rect(screen, (150, 150, 200), rect)
+            draw_text(text, (rect.x + 20, rect.y + 10))
+
+        pygame.display.flip()
+
+        # Event loop
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            # ESC returns to main menu
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return
+
+            # Button clicks
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = event.pos
+
+                for name, rect in buttons.items():
+                    if rect.collidepoint(pos):
+
+                        if name == "Stack":
+                            stack_visualiser(screen)
+
+                        elif name == "Queue":
+                            queue_visualiser(screen)
+
+                        elif name == "Linked List":
+                            linked_list_visualiser(screen)
+
+                        elif name == "BST":
+                            bst_visualiser(screen)
+
+        clock.tick(30)
+
+
     pass
 
 
