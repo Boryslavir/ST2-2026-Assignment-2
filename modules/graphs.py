@@ -13,7 +13,7 @@ from cores.globals import (
     NODE_DEFAULT,
     NODE_QUEUED,
     NODE_VISITED,
-    SCREEN,
+    SCREEN
 )
 from cores.setup import (
     draw_text,
@@ -76,7 +76,6 @@ class GraphModule:
         self.btn_reset = pygame.Rect(290, 520, 110, btn_h)
 
 
-    # ── Private helpers ────────────────────────────────────────────────────
     def _build_adj(self) -> dict[str, list[str]]:
         adj: dict[str, list[str]] = {n: [] for n in self.NODES}
         for u, v in self.EDGES:
@@ -136,7 +135,7 @@ class GraphModule:
         pygame.display.flip()
 
 
-    # ── Traversal generators ───────────────────────────────────────────────
+    # Traversal generators
     def _bfs_gen(self):
         visited: set[str] = set()
         queue = deque([self.start_node])
@@ -178,7 +177,7 @@ class GraphModule:
         yield "DFS complete!"
 
 
-    # ── Dispatch ───────────────────────────────────────────────────────────
+    # Dispatch
     def _start_algo(self, name: str) -> None:
         if self.animating:
             return
@@ -196,7 +195,7 @@ class GraphModule:
         self.status_msg = f"Reset. Start node: {self.start_node}"
 
 
-    # ── Public run loop ────────────────────────────────────────────────────
+    # Main method to run the module
     def run(self) -> None:
         while True:
             self._draw()

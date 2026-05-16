@@ -11,7 +11,7 @@ from cores.globals import (
     HEAP_NODE,
     SCREEN,
     WHITE,
-    WIDTH,
+    WIDTH
 )
 from cores.setup import (
     draw_text,
@@ -47,7 +47,7 @@ class HeapModule:
         self.btn_reset   = pygame.Rect(195, 520, 110, btn_h)
 
 
-    # ── Pure heap logic (no animation) ────────────────────────────────────
+    # Pure heap logic (no animation)
     def _heap_insert(self, val: int) -> None:
         self.data.append(val)
         self._sift_up_silent(len(self.data) - 1)
@@ -76,7 +76,7 @@ class HeapModule:
             i = smallest
 
 
-    # ── Node position ──────────────────────────────────────────────────────
+    # Node position
     def _node_pos(self, index: int) -> tuple[int, int]:
         """Map heap array index to (x, y) pixel position in the tree display."""
         if index == 0:
@@ -90,7 +90,7 @@ class HeapModule:
         return (int(x), int(y))
 
 
-    # ── Drawing ────────────────────────────────────────────────────────────
+    # Drawing
     def _draw(self) -> None:
         SCREEN.fill(BG_COLOUR)
         draw_text("Heap Visualiser (Min-Heap)", (20, 10), font=FONT_TITLE)
@@ -129,7 +129,7 @@ class HeapModule:
         pygame.display.flip()
 
 
-    # ── Animated sift operations ───────────────────────────────────────────
+    # Animated sift operations
     def _animate_insert(self, val: int) -> None:
         """Append `val` then sift-up with per-swap highlighting."""
         self.data.append(val)
@@ -187,7 +187,7 @@ class HeapModule:
         self.status_msg = "Heap reset."
 
 
-    # ── Public run loop ────────────────────────────────────────────────────
+    # Main method to run the module
     def run(self) -> None:
         while True:
             self._draw()
