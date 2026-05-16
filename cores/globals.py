@@ -36,7 +36,7 @@ NODE_VISITED:   tuple[int, int, int] = (80, 200, 120)
 NODE_CURRENT:   tuple[int, int, int] = (240, 80, 80)
 NODE_QUEUED:    tuple[int, int, int] = (240, 200, 50)
 HEAP_NODE:      tuple[int, int, int] = (100, 140, 220)
-HEAP_HIGHLIGH:  tuple[int, int, int] = (240, 80, 80)
+HEAP_HIGHLIGHT: tuple[int, int, int] = (240, 80, 80)
 BG_TOOLBAR:     tuple[int, int, int] = (230, 230, 255)
 
 
