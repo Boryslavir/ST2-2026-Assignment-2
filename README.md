@@ -1,5 +1,5 @@
 # Setup Guide
-Make sure `[uv](https://docs.astral.sh/uv/getting-started/installation/)` is installed on your system. You can check by running this comment:
+Make sure [uv](https://docs.astral.sh/uv/getting-started/installation/) is installed on your system. You can check by running this comment:
 
 ```bash
 # Linux/MacOS
