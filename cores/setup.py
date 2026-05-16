@@ -145,10 +145,9 @@ def main() -> None:
                     sorting_mod.run()
 
                 case 'Graphs':
-                    # from modules.graphs  import GraphModule
-                    # graph_mod   = GraphModule()
-                    # graph_mod.run()
-                    pass
+                    from modules.graphs import GraphModule
+                    graph_mod: GraphModule = GraphModule()
+                    graph_mod.run()
 
                 case 'Heap':
                     # from modules.heap    import HeapModule
