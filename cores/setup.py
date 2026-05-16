@@ -113,7 +113,6 @@ def main():
             buttons: dict[str, pygame.Rect] = main_menu()
 
         else:
-            # Modular DSA selection buttons
             match current_module:
                 case 'Data Structures':
                     from modules.data_structures import data_structures_module
@@ -139,6 +138,10 @@ def main():
                     from modules.puzzles import puzzles_module
 
                     puzzles_module()
+
+                case _:
+                    # After each module exits (ESC), return to menu
+                    current_module = None
 
         CLOCK.tick(30.0)
 
