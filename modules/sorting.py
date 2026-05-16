@@ -11,7 +11,7 @@ from cores.globals import (
     FONT_TITLE,
     HEIGHT,
     SCREEN,
-    WIDTH,
+    WIDTH
 )
 from cores.setup import (
     draw_text,
@@ -59,7 +59,6 @@ class SortingModule:
         self.btn_faster = pygame.Rect(604, 50,  36, btn_h)
 
 
-    # ── Private helpers ────────────────────────────────────────────────────
     def _reset_array(self) -> None:
         self.arr:     list[int]                 = [randint(20, 100) for _ in range(self.ARRAY_SIZE)]
         self.colours: list[tuple[int, int, int]] = [BAR_DEFAULT] * self.ARRAY_SIZE
@@ -98,7 +97,7 @@ class SortingModule:
         pygame.display.flip()
 
 
-    # ── Sort generators ────────────────────────────────────────────────────
+    # Sort generators
     def _bubble_sort_gen(self) -> Generator[str, Any, None]:
         arr, colours = self.arr, self.colours
         n = len(arr)
@@ -173,7 +172,7 @@ class SortingModule:
         yield "Sorted!"
 
 
-    # ── Dispatch ───────────────────────────────────────────────────────────
+    # Dispatch
     def _start_algo(self, name: str) -> None:
         if self.animating:
             return
@@ -193,7 +192,7 @@ class SortingModule:
         self.gen        = None
 
 
-    # ── Public run loop ────────────────────────────────────────────────────
+    # Main method to run the module
     def run(self) -> None:
         """Block until the user presses ESC, then return to the caller."""
         while True:
