@@ -150,10 +150,9 @@ def main() -> None:
                     graph_mod.run()
 
                 case 'Heap':
-                    # from modules.heap    import HeapModule
-                    # heap_mod    = HeapModule()
-                    # heap_mod.run()
-                    pass
+                    from modules.heap import HeapModule
+                    heap_mod: HeapModule = HeapModule()
+                    heap_mod.run()
 
                 case 'Puzzles':
                     from modules.puzzles import puzzles_module
