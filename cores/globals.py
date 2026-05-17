@@ -4,7 +4,8 @@ import pygame
 # Pygame General Constants
 WIDTH:      int                     = 800
 HEIGHT:     int                     = 600
-BG_COLOUR:  tuple[int, int, int]    = (200, 200, 250)
+BTN_COLOUR: tuple[int, int, int]    = (150, 150, 200)   # RGB format
+TXT_COLOUR: tuple[int, int, int]    = (0, 0, 0)         # RGB format
 CLOCK:      pygame.time.Clock       = pygame.time.Clock()
 
 
