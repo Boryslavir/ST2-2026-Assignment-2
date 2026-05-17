@@ -27,3 +27,16 @@ uv run ./main.py
 uv sync --frozen --no-cache
 uv run .\main.py
 ```
+
+
+# Unit test
+To run test files under `/tests` directory:
+
+```bash
+# Linux/MacOS
+uv run ./test/<test-file-name>.py -v # Optional '-v' flag for verbosity
+```
+```ps1
+# Windows
+uv run .\test\<test-file-name>.py -v # Optional '-v' flag for verbosity
+```
