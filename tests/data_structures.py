@@ -1,9 +1,19 @@
+import os
+import sys
 import unittest
 
+# Prevent Pygame / SDL from trying to open a display in a headless environment
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-# -----------------------------
-# Data Structure Logic Under Test
-# -----------------------------
+
+# Make sure the project root is on the path when running from tests/
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+
+import pygame
+pygame.init()
+
 
 class Node:
     def __init__(self, value):
