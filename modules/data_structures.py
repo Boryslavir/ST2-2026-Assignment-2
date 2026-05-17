@@ -1,10 +1,14 @@
+import pygame
+from sys import exit
+from cores.globals import (
+    FONT,
+    HEIGHT,
+    WIDTH
+)
+
+
+
 def data_structures_module(screen):
-    import pygame
-    import sys
-
-    WIDTH, HEIGHT = 800, 600
-    FONT = pygame.font.SysFont(None, 32)
-
     def draw_text(surface, text, pos, font=FONT, color=(0,0,0)):
         surface.blit(font.render(text, True, color), pos)
 
@@ -78,7 +82,7 @@ def data_structures_module(screen):
             draw_text(surface, "PREORDER", (preorder_btn.x+5, preorder_btn.y+8), FONT2)
             draw_text(surface, "POSTORDER", (postorder_btn.x+5, postorder_btn.y+8), FONT2)
 
-            draw_tree(surface, root, WIDTH//2, 200, 200, FONT2)
+            draw_tree(surface, root, WIDTH // 2, 200, 200, FONT2)
             draw_text(surface, traversal_text, (50, 450), FONT2)
 
             pygame.display.flip()
@@ -86,7 +90,7 @@ def data_structures_module(screen):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
-                    sys.exit()
+                    exit()
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -149,7 +153,7 @@ def data_structures_module(screen):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
-                    sys.exit()
+                    exit()
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -207,7 +211,7 @@ def data_structures_module(screen):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
-                    sys.exit()
+                    exit()
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -258,7 +262,7 @@ def data_structures_module(screen):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
-                    sys.exit()
+                    exit()
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -304,7 +308,7 @@ def data_structures_module(screen):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                sys.exit()
+                exit()
 
             # ESC to return to main menu
             if event.type == pygame.KEYDOWN:
