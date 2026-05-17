@@ -1,4 +1,1222 @@
-def puzzles_module():
-    """Pathfinding, event simulation, DP puzzles"""
-    # TODO: Implement puzzle games
-    pass
+import pygame
+import heapq
+import math
+import random
+from dataclasses import dataclass, field
+from sys import exit
+from cores.globals import (
+    BG_PANEL,
+    CLOCK,
+    DIM,
+    DP_CELL,
+    DP_COLS,
+    DP_CORNER,
+    DP_FILL_DELAY_MS,
+    DP_GRID_H,
+    DP_GRID_W,
+    DP_GRID_X,
+    DP_GRID_Y,
+    DP_PAD,
+    DP_PATH_DELAY_MS,
+    DP_ROWS,
+    EDGE_COLOUR,
+    EMPTY_COLOUR,
+    END_COLOUR,
+    END_GLOW,
+    EQ_ARRIVAL_MEAN_S,
+    EQ_HEAP_H,
+    EQ_HEAP_Y_BASE,
+    EQ_LEVEL_GAP,
+    EQ_NODE_R,
+    EQ_PRIO_NAMES,
+    EQ_PROCESS_H,
+    EQ_PROCESS_Y,
+    EQ_SERVICE_MAX_S,
+    EQ_SERVICE_MIN_S,
+    EQ_TOP_MARGIN,
+    FRONTIER_COLOUR,
+    HEADER_HEIGHT,
+    HEIGHT,
+    LINE_PANEL,
+    PATH_COLOUR,
+    PATH_GLOW,
+    PF_CELL,
+    PF_COLS,
+    PF_CORNER,
+    PF_FADE_MS,
+    PF_GRID_H,
+    PF_GRID_W,
+    PF_GRID_X,
+    PF_GRID_Y,
+    PF_PAD,
+    PF_PATH_REVEAL_MS,
+    PF_ROWS,
+    PF_STEPS_PER_FRAME,
+    PRIO_COLOUR,
+    START_COLOUR,
+    START_GLOW,
+    TEXT,
+    TXT_DANGER,
+    TXT_SUCCESS,
+    TXT_WARNING,
+    VISITED_COLOUR,
+    WALL_COLOUR,
+    WIDTH
+)
+
+
+def lerp(a, b, t):
+    """Linear-interpolate two RGB tuples by t in [0, 1]."""
+    return (
+        int(a[0] + (b[0] - a[0]) * t),
+        int(a[1] + (b[1] - a[1]) * t),
+        int(a[2] + (b[2] - a[2]) * t),
+    )
+
+
+def make_background():
+    """Vertical gradient backdrop, computed once and reused per frame."""
+    surf = pygame.Surface((WIDTH, HEIGHT))
+    for y in range(HEIGHT):
+        t = y / HEIGHT
+        c = lerp((248, 248, 255), (215, 220, 245), t)
+        pygame.draw.line(surf, c, (0, y), (WIDTH, y))
+    return surf
+
+
+def screen():
+    """Lazily fetch the active pygame display surface."""
+    return pygame.display.get_surface()
+
+
+def draw_header(title: str, subtitle: str, fonts) -> None:
+    pygame.draw.rect(screen(), BG_PANEL, (0, 0, WIDTH, HEADER_HEIGHT))
+    pygame.draw.line(screen(), LINE_PANEL, (0, HEADER_HEIGHT), (WIDTH, HEADER_HEIGHT), 2)
+    screen().blit(fonts['title'].render(title, True, TEXT),  (20, 8))
+    screen().blit(fonts['small'].render(subtitle, True, DIM), (20, 38))
+
+
+# Puzzle 1
+class Button:
+    """Minimal clickable button with label and optional fill colour."""
+
+    def __init__(self, rect, label, callback, color=None):
+        self.rect     = pygame.Rect(*rect) if not isinstance(rect, pygame.Rect) else rect
+        self.label    = label
+        self.callback = callback
+        self.color    = color or LINE_PANEL
+        self._hover   = False
+
+
+    def handle(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self._hover = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                self.callback()
+
+
+    def draw(self, surface, font):
+        fill = (
+            lerp(self.color, (255, 255, 255), 0.25)
+            if   (self._hover)
+            else (self.color)
+        )
+        pygame.draw.rect(
+            surface,
+            fill,
+            self.rect,
+            border_radius=6
+        )
+        pygame.draw.rect(
+            surface,
+            TEXT,
+            self.rect,
+            width=1,
+            border_radius=6
+        )
+        text = font.render(
+            self.label,
+            True,
+            TEXT
+        )
+        surface.blit(text, (
+            self.rect.centerx - text.get_width()  // 2,
+            self.rect.centery - text.get_height() // 2,
+        ))
+
+
+def build_fonts():
+    """Create the fonts dict that the three sub-puzzles expect."""
+    return {
+        'title': pygame.font.SysFont(name=None, size=32),
+        'body':  pygame.font.SysFont(name=None, size=22),
+        'small': pygame.font.SysFont(name=None, size=18),
+    }
+
+
+def pf_neighbors(cell, grid):
+    r, c = cell
+    for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        nr, nc = r + dr, c + dc
+        if  (0 <= nr < PF_ROWS) \
+        and (0 <= nc < PF_COLS) \
+        and (grid[nr][nc] != 1):
+            yield (nr, nc)
+
+
+def pf_heuristic(a, b):
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def run_pathfinding(fonts):
+    scr     = screen()
+    grid    = [([0] * PF_COLS) for _ in range(PF_ROWS)]
+    state   = {
+        "start": None,
+        "end": None,
+        "mode": "EDIT",
+        "visited": {},
+        "frontier": {},
+        "path_list": [],
+        "path_index": {},
+        "path_reveal_t": 0,
+        "open_heap": [],
+        "came_from": {},
+        "g_score": {},
+        "counter": 0
+    }
+    bg = make_background()
+
+
+    def init_search():
+        s, e = state["start"], state["end"]
+        state["open_heap"] = []
+        state["came_from"] = {}
+        state["g_score"]   = {s: 0}
+        state["counter"]   = 0
+        heapq.heappush(state["open_heap"], (pf_heuristic(s, e), 0, s))
+        now = pygame.time.get_ticks()
+        state["visited"]    = {}
+        state["frontier"]   = {s: now}
+        state["path_list"]  = []
+        state["path_index"] = {}
+
+
+    def step_search():
+        if not state["open_heap"]:
+            state["mode"] = "DONE"
+            return True
+        _, _, current = heapq.heappop(state["open_heap"])
+        if current in state["visited"]:
+            return False
+        if current == state["end"]:
+            seq = [current]
+            while seq[-1] in state["came_from"]:
+                seq.append(state["came_from"][seq[-1]])
+            seq.reverse()
+            state["path_list"]     = seq
+            state["path_index"]    = {c: i for i, c in enumerate(seq)}
+            state["path_reveal_t"] = pygame.time.get_ticks()
+            state["mode"]          = "DONE"
+            return True
+        now = pygame.time.get_ticks()
+        state["visited"][current] = now
+        state["frontier"].pop(current, None)
+        for nb in pf_neighbors(current, grid):
+            t = state["g_score"][current] + 1
+            if nb not in state["g_score"] or t < state["g_score"][nb]:
+                state["came_from"][nb] = current
+                state["g_score"][nb]   = t
+                state["counter"]      += 1
+                heapq.heappush(
+                    state["open_heap"],
+                    (t + pf_heuristic(nb, state["end"]), state["counter"], nb),
+                )
+                if nb not in state["visited"]:
+                    state["frontier"][nb] = now
+        return False
+
+
+    def reset_search():
+        state["visited"]    = {}
+        state["frontier"]   = {}
+        state["path_list"]  = []
+        state["path_index"] = {}
+        state["mode"]       = "EDIT"
+
+
+    def clear_all():
+        for r in range(PF_ROWS):
+            for c in range(PF_COLS):
+                grid[r][c] = 0
+        state["start"] = None
+        state["end"]   = None
+        reset_search()
+
+
+    def cell_at(pos):
+        x, y = pos
+        if not (
+            (PF_GRID_X <= x < (PF_GRID_X + PF_GRID_W)) and
+            (PF_GRID_Y <= y < (PF_GRID_Y + PF_GRID_H))
+        ):
+            return None
+
+        return (
+            (y - PF_GRID_Y) // PF_CELL,
+            (x - PF_GRID_X) // PF_CELL
+        )
+
+
+    def paint(pos, button):
+        if state["mode"] != "EDIT":
+            return
+        rc = cell_at(pos)
+        if rc is None:
+            return
+        r, c = rc
+        if button == 1:
+            if state["start"] is None:
+                state["start"] = (r, c); grid[r][c] = 2
+            elif state["end"] is None and (r, c) != state["start"]:
+                state["end"]   = (r, c); grid[r][c] = 3
+            elif grid[r][c] == 0:
+                grid[r][c] = 1
+        elif button == 3:
+            if (r, c) == state["start"]: state["start"] = None
+            if (r, c) == state["end"]:   state["end"]   = None
+            grid[r][c] = 0
+
+
+    def start_run():
+        if state["mode"] == "EDIT" and state["start"] and state["end"]:
+            init_search()
+            state["mode"] = "RUNNING"
+
+    btns = [
+        Button(
+            (40,  555, 90, 36),
+            "RUN",
+            start_run,
+            color=TXT_SUCCESS
+        ),
+        Button(
+            (140, 555, 90, 36),
+            "RESET",
+            reset_search
+        ),
+        Button(
+            (240, 555, 90, 36),
+            "CLEAR",
+            clear_all,
+            color=TXT_DANGER
+        ),
+        Button(
+            (WIDTH - 100, 555, 80, 36),
+            "BACK",
+            lambda: state.update(_exit=True)
+        )
+    ]
+
+    dragging = False
+    drag_btn = None
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE: return "menu"
+                if event.key == pygame.K_SPACE:  start_run()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
+                paint(event.pos, event.button)
+                dragging = True
+                drag_btn = event.button
+            if event.type == pygame.MOUSEBUTTONUP:
+                dragging = False
+            if event.type == pygame.MOUSEMOTION and dragging:
+                paint(event.pos, drag_btn)
+            for b in btns:
+                b.handle(event)
+
+        if state.get("_exit"):
+            return "menu"
+
+        if state["mode"] == "RUNNING":
+            for _ in range(PF_STEPS_PER_FRAME):
+                if step_search():
+                    break
+
+        now = pygame.time.get_ticks()
+
+        scr.blit(bg, (0, 0))
+        draw_header(
+            "Pathfinding (A*)",
+            "L-click: start, end, walls   R-click: erase   SPACE: run   ESC: back",
+            fonts,
+        )
+
+        info = fonts['body'].render(
+            f"visited {len(state['visited'])}   "
+            f"frontier {len(state['frontier'])}   " +
+            (f"path length {len(state['path_list']) - 1}"
+             if state["path_list"] else
+             ("no path" if state["mode"] == "DONE" else "")),
+            True, TEXT,
+        )
+        scr.blit(info, (40, HEADER_HEIGHT + 15))
+
+        # Draw cells
+        path_index = state["path_index"]
+        for r in range(PF_ROWS):
+            for c in range(PF_COLS):
+                rect = pygame.Rect(
+                    (PF_GRID_X + (c * PF_CELL) + PF_PAD),
+                    (PF_GRID_Y + (r * PF_CELL) + PF_PAD),
+                    (PF_CELL - 2 * PF_PAD),
+                    (PF_CELL - 2 * PF_PAD),
+                )
+                pos  = (r, c)
+                base = grid[r][c]
+
+                color = EMPTY_COLOUR
+                if state["path_list"] and pos in path_index:
+                    elapsed = now - state["path_reveal_t"]
+                    if path_index[pos] * PF_PATH_REVEAL_MS <= elapsed:
+                        pulse = (math.sin(now / 250 + path_index[pos] * 0.3) + 1) * 0.5
+                        color = lerp(PATH_COLOUR, PATH_GLOW, pulse * 0.4)
+                elif base == 2:
+                    pulse = (math.sin(now / 280) + 1) * 0.5
+                    color = lerp(START_COLOUR, START_GLOW, pulse * 0.5)
+                elif base == 3:
+                    pulse = (math.sin(now / 280 + 1.5) + 1) * 0.5
+                    color = lerp(END_COLOUR, END_GLOW, pulse * 0.5)
+                elif base == 1:
+                    color = WALL_COLOUR
+                elif pos in state["visited"]:
+                    t = min(1.0, (now - state["visited"][pos]) / PF_FADE_MS)
+                    color = lerp(FRONTIER_COLOUR, VISITED_COLOUR, t)
+                elif pos in state["frontier"]:
+                    t = min(1.0, (now - state["frontier"][pos]) / PF_FADE_MS)
+                    color = lerp(EMPTY_COLOUR, FRONTIER_COLOUR, t)
+
+                pygame.draw.rect(scr, color, rect, border_radius=PF_CORNER)
+
+        for b in btns:
+            b.draw(scr, fonts['body'])
+
+        pygame.display.flip()
+        CLOCK.tick(60)
+
+
+
+# Puzzle 2
+@dataclass(order=True)
+class EQEvent:
+    priority:    int
+    seq:         int
+    label:       str   = field(compare=False)
+    arrival_t:   float = field(compare=False, default=0.0)
+    service_dur: float = field(compare=False, default=1.0)
+    cx:          float = field(compare=False, default=WIDTH / 2)
+    cy:          float = field(compare=False, default=-50.0)
+    born_ms:     int   = field(compare=False, default=0)
+
+
+def _eq_heap_pos(index, heap_size):
+    level        = int(math.floor(math.log2(index + 1)))
+    pos_in_level = index - (2 ** level - 1)
+    count        = 2 ** level
+    avail_w      = WIDTH - 60
+    x = 30 + avail_w * (pos_in_level + 0.5) / count
+    y = EQ_TOP_MARGIN + level * EQ_LEVEL_GAP
+    return (x, y)
+
+
+def _eq_lerp_xy(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+
+
+def run_event_queue(fonts):
+    scr = screen()
+    bg     = make_background()
+
+    state = {
+        "running": True, "sim_time": 0.0, "sim_speed": 1.0,
+        "seq": 0, "event_id": 0,
+        "heap": [], "next_arrival_t": 0.5,
+        "server": None, "server_start_t": 0.0,
+        "processed": 0, "total_wait": 0.0,
+        "history": [],
+    }
+
+    def next_id():
+        state["event_id"] += 1
+        return state["event_id"]
+
+    def spawn(priority=None):
+        if priority is None:
+            priority = random.choices([1, 2, 3, 4, 5], weights=[1, 2, 3, 2, 1])[0]
+        state["seq"] += 1
+        ev = EQEvent(
+            priority=priority,
+            seq=state["seq"],
+            label=f"E{next_id()}",
+            arrival_t=state["sim_time"],
+            service_dur=random.uniform(EQ_SERVICE_MIN_S, EQ_SERVICE_MAX_S),
+            cx=WIDTH / 2 + random.uniform(-30, 30),
+            cy=EQ_HEAP_Y_BASE - 40,
+            born_ms=pygame.time.get_ticks(),
+        )
+        heapq.heappush(state["heap"], ev)
+
+    def schedule_next():
+        state["next_arrival_t"] = state["sim_time"] + random.expovariate(1.0 / EQ_ARRIVAL_MEAN_S)
+
+    def reset():
+        state.update({
+            "running": True, "sim_time": 0.0, "sim_speed": 1.0,
+            "seq": 0, "event_id": 0, "heap": [],
+            "server": None, "server_start_t": 0.0,
+            "processed": 0, "total_wait": 0.0, "history": [],
+        })
+        schedule_next()
+
+    btns = [
+        Button(
+            (40,  555, 130, 36),
+            "PAUSE / RESUME",
+            lambda: state.update(running=not state["running"]),
+            color=TXT_WARNING
+        ),
+        Button(
+            (180, 555, 60,  36),
+            "SLOW",
+            lambda: state.update(sim_speed=max(0.1, state["sim_speed"] / 1.4))
+        ),
+        Button(
+            (250, 555, 60,  36),
+            "FAST",
+            lambda: state.update(sim_speed=min(8.0, state["sim_speed"] * 1.4))
+        ),
+        Button(
+            (320, 555, 90,  36),
+            "INJECT",
+            lambda: spawn(priority=1),
+            color=TXT_DANGER
+        ),
+        Button(
+            (420, 555, 70,  36),
+            "RESET",
+            reset
+        ),
+        Button(
+            (WIDTH - 100, 555, 80, 36),
+            "BACK",
+            lambda: state.update(_exit=True)
+        )
+    ]
+
+    schedule_next()
+    last_ms = pygame.time.get_ticks()
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return "menu"
+            for b in btns:
+                b.handle(event)
+
+        if state.get("_exit"):
+            return "menu"
+
+        now_ms  = pygame.time.get_ticks()
+        dt_real = (now_ms - last_ms) / 1000.0
+        last_ms = now_ms
+
+        if state["running"]:
+            state["sim_time"] += dt_real * state["sim_speed"]
+            while state["sim_time"] >= state["next_arrival_t"]:
+                spawn()
+                schedule_next()
+            if state["server"] is None and state["heap"]:
+                state["server"]         = heapq.heappop(state["heap"])
+                state["server_start_t"] = state["sim_time"]
+                state["total_wait"]    += state["sim_time"] - state["server"].arrival_t
+            elif state["server"] is not None:
+                if state["sim_time"] - state["server_start_t"] >= state["server"].service_dur:
+                    state["processed"] += 1
+                    state["history"].insert(0, state["server"])
+                    del state["history"][8:]
+                    state["server"] = None
+
+        # Animate node positions
+        for i, ev in enumerate(state["heap"]):
+            tx, ty = _eq_heap_pos(i, len(state["heap"]))
+            ev.cx, ev.cy = _eq_lerp_xy((ev.cx, ev.cy), (tx, ty), 0.18)
+        if state["server"]:
+            target = (WIDTH / 2, EQ_PROCESS_Y + EQ_PROCESS_H / 2 - 18)
+            state["server"].cx, state["server"].cy = _eq_lerp_xy(
+                (state["server"].cx, state["server"].cy), target, 0.22)
+
+        # Render
+        scr.blit(bg, (0, 0))
+        draw_header(
+            "Event Queue Simulator",
+            "min-heap priority queue with discrete-event simulation   ESC: back",
+            fonts,
+        )
+
+        # Heap panel
+        pygame.draw.rect(scr, BG_PANEL, (0, EQ_HEAP_Y_BASE, WIDTH, EQ_HEAP_H))
+        scr.blit(
+            fonts['small'].render("PRIORITY HEAP", True, DIM),
+            (16, EQ_HEAP_Y_BASE + 6)
+        )
+        scr.blit(
+            fonts['small'].render(f"size {len(state['heap'])}", True, DIM),
+            (WIDTH - 90, EQ_HEAP_Y_BASE + 6)
+        )
+
+        # Edges parent -> child
+        for i in range(1, len(state["heap"])):
+            p = state["heap"][(i - 1) // 2]
+            c = state["heap"][i]
+            pygame.draw.line(
+                scr,
+                EDGE_COLOUR,
+                (p.cx, p.cy),
+                (c.cx, c.cy),
+                2
+            )
+
+        # Nodes
+        for i, ev in enumerate(state["heap"]):
+            color = PRIO_COLOUR[ev.priority]
+            age   = now_ms - ev.born_ms
+            pop_t = min(1.0, age / 220)
+            r = int(EQ_NODE_R * (0.4 + 0.6 * pop_t))
+            pygame.draw.circle(scr, color, (int(ev.cx), int(ev.cy)), r)
+            label = fonts['small'].render(ev.label, True, (20, 22, 35))
+            scr.blit(
+                label,
+                (ev.cx - label.get_width() / 2,
+                ev.cy - label.get_height() / 2)
+            )
+            if i == 0:
+                pygame.draw.circle(
+                    scr,
+                    (255, 255, 255),
+                    (int(ev.cx), int(ev.cy)),
+                    r + 3, 2
+                )
+
+        # Server panel
+        pygame.draw.line(
+            scr,
+            LINE_PANEL,
+            (0, EQ_PROCESS_Y),
+            (WIDTH, EQ_PROCESS_Y),
+            1
+        )
+        scr.blit(
+            fonts['small'].render("SERVER", True, DIM),
+            (16, EQ_PROCESS_Y + 6)
+        )
+
+        centre = (WIDTH / 2, EQ_PROCESS_Y + EQ_PROCESS_H / 2 - 18)
+        pygame.draw.circle(
+            scr,
+            LINE_PANEL,
+            (int(centre[0]), int(centre[1])), EQ_NODE_R + 8,
+            2
+        )
+
+        if state["server"]:
+            ev = state["server"]
+            color = PRIO_COLOUR[ev.priority]
+            pygame.draw.circle(
+                scr,
+                color,
+                (int(ev.cx),
+                 int(ev.cy)),
+                EQ_NODE_R
+            )
+            label = fonts['small'].render(ev.label, True, (20, 22, 35))
+            scr.blit(
+                label,
+                (ev.cx - label.get_width() / 2,
+                ev.cy - label.get_height() / 2)
+            )
+
+            prog  = min(1.0, (state["sim_time"] - state["server_start_t"]) / ev.service_dur)
+            bar_x = WIDTH / 2 - 150
+            bar_y = EQ_PROCESS_Y + EQ_PROCESS_H / 2 + 14
+            pygame.draw.rect(
+                scr,
+                LINE_PANEL,
+                (bar_x, bar_y, 300, 6),
+                border_radius=3
+            )
+            pygame.draw.rect(
+                scr,
+                color,
+                (bar_x, bar_y, 300 * prog, 6),
+                border_radius=3
+            )
+            info = fonts['small'].render(
+                f"{ev.label} | {EQ_PRIO_NAMES[ev.priority]} | "
+                f"waited {state['sim_time'] - ev.arrival_t:.1f}s",
+                True, TEXT,
+            )
+            scr.blit(
+                info,
+                (WIDTH / 2 - info.get_width() / 2,
+                 bar_y + 12)
+            )
+        else:
+            t = fonts['small'].render(
+                "idle - waiting for events",
+                True,
+                DIM
+            )
+            scr.blit(
+                t,
+                (WIDTH / 2 - t.get_width() / 2,
+                EQ_PROCESS_Y + EQ_PROCESS_H / 2 + 14)
+            )
+
+        # History dots
+        scr.blit(
+            fonts['small'].render("recent", True, DIM),
+            (WIDTH - 230, EQ_PROCESS_Y + 6)
+        )
+        for i, ev in enumerate(state["history"]):
+            cx2  = WIDTH - 24 - i * 26
+            cy2  = EQ_PROCESS_Y + 32
+            alpha = max(60, 255 - i * 25)
+            surf  = pygame.Surface((22, 22), pygame.SRCALPHA)
+            pygame.draw.circle(
+                surf,
+                (*PRIO_COLOUR[ev.priority], alpha),
+                (11, 11),
+                9
+            )
+            scr.blit(
+                surf,
+                (cx2 - 11, cy2 - 11)
+            )
+
+        # Status line (top-right)
+        avg = state["total_wait"] / state["processed"] if state["processed"] else 0.0
+        info = fonts['body'].render(
+            f"t = {state['sim_time']:6.1f}s   processed {state['processed']}   "
+            f"avg wait {avg:.2f}s   speed {state['sim_speed']:.1f}x"
+            + ("   [PAUSED]" if not state["running"] else ""),
+            True, TEXT,
+        )
+        scr.blit(
+            info,
+            (WIDTH - info.get_width() - 16, HEADER_HEIGHT + 4)
+        )
+
+        for b in btns:
+            b.draw(scr, fonts['body'])
+
+        pygame.display.flip()
+        CLOCK.tick(60)
+
+
+# Puzzle 3
+def _dp_compute(wall):
+    """Standard 2-D path-count DP. Returns (table, fill_order, total)."""
+    dp         = [[0] * DP_COLS for _ in range(DP_ROWS)]
+    fill_order = []
+    for r in range(DP_ROWS):
+        for c in range(DP_COLS):
+            fill_order.append((r, c))
+            if wall[r][c]:
+                continue
+            if r == 0 and c == 0:
+                dp[r][c] = 1
+                continue
+            v = 0
+            if r > 0: v += dp[r - 1][c]
+            if c > 0: v += dp[r][c - 1]
+            dp[r][c] = v
+    return dp, fill_order, dp[DP_ROWS - 1][DP_COLS - 1]
+
+
+def _dp_sample_path(dp, wall):
+    """Pick a random valid path, biased by sub-path counts."""
+    if dp[DP_ROWS - 1][DP_COLS - 1] == 0:
+        return []
+    r, c = 0, 0
+    path = [(0, 0)]
+    while (r, c) != (DP_ROWS - 1, DP_COLS - 1):
+        right = (
+            dp[r][c + 1]
+            if   (c + 1 < DP_COLS and not wall[r][c + 1])
+            else (0)
+        )
+        down  = (
+            dp[r + 1][c]
+            if   (r + 1 < DP_ROWS and not wall[r + 1][c]) 
+            else (0)
+        )
+        if right + down == 0:
+            return path
+        if random.random() < right / (right + down):
+            c += 1
+        else:
+            r += 1
+        path.append((r, c))
+    return path
+
+
+def _dp_format(n):
+    if n < 1_000:         return str(n)
+    if n < 1_000_000:     return f"{n / 1_000:.1f}k"
+    if n < 1_000_000_000: return f"{n / 1_000_000:.1f}M"
+    return f"{n:.1e}"
+
+
+def run_dp_grid(fonts):
+    scr = screen()
+    bg     = make_background()
+    wall   = [([False] * DP_COLS) for _ in range(DP_ROWS)]
+    state  = {
+        "dp": [([0] * DP_COLS) for _ in range(DP_ROWS)],
+        "fill_order": [],
+        "fill_start_ms": 0,
+        "mode": "EDIT",
+        "total_paths": 0,
+        "path": [],
+        "path_start_ms": 0
+    }
+
+
+    def start_fill():
+        dp, order, total = _dp_compute(wall)
+        state["dp"]            = dp
+        state["fill_order"]    = order
+        state["total_paths"]   = total
+        state["fill_start_ms"] = pygame.time.get_ticks()
+        state["mode"]          = "FILLING"
+        state["path"]          = []
+
+    def new_path():
+        state["path"]          = _dp_sample_path(state["dp"], wall)
+        state["path_start_ms"] = pygame.time.get_ticks()
+
+
+    def reset_dp():
+        state["dp"]          = [([0] * DP_COLS) for _ in range(DP_ROWS)]
+        state["mode"]        = "EDIT"
+        state["path"]        = []
+        state["total_paths"] = 0
+
+
+    def clear_all():
+        for r in range(DP_ROWS):
+            for c in range(DP_COLS):
+                wall[r][c] = False
+        reset_dp()
+
+
+    def toggle_wall(pos):
+        if state["mode"] != "EDIT":
+            return
+        x, y = pos
+        if not (
+            (DP_GRID_X <= x < (DP_GRID_X + DP_GRID_W)) and
+            (DP_GRID_Y <= y < (DP_GRID_Y + DP_GRID_H))
+        ):
+            return
+        c = (x - DP_GRID_X) // DP_CELL
+        r = (y - DP_GRID_Y) // DP_CELL
+        if (r, c) == (0, 0) or (r, c) == (DP_ROWS - 1, DP_COLS - 1):
+            return
+        wall[r][c] = not wall[r][c]
+
+
+    def space_action():
+        if state["mode"] == "EDIT":
+            start_fill()
+        elif state["mode"] == "DONE" and state["total_paths"] > 0:
+            new_path()
+
+    btns = [
+        Button(
+            (40,  555, 140, 36),
+            "RUN / NEW PATH",
+            space_action,
+            color=TXT_SUCCESS
+        ),
+        Button(
+            (190, 555, 100, 36),
+            "RESET DP",
+            reset_dp
+        ),
+        Button(
+            (300, 555, 80,  36),
+            "CLEAR",
+            clear_all,
+            color=TXT_DANGER
+        ),
+        Button(
+            (WIDTH - 100, 555, 80, 36),
+            "BACK",
+            lambda: state.update(_exit=True)
+        ),
+    ]
+
+    dragging  = False
+    last_cell = None
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE: return "menu"
+                if event.key == pygame.K_SPACE:  space_action()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                toggle_wall(event.pos)
+                dragging = True
+                x, y = event.pos
+                if DP_GRID_Y <= y < DP_GRID_Y + DP_GRID_H:
+                    last_cell = (
+                        (y - DP_GRID_Y) // DP_CELL,
+                        (x - DP_GRID_X) // DP_CELL
+                    )
+            if event.type == pygame.MOUSEBUTTONUP:
+                dragging  = False
+                last_cell = None
+            if event.type == pygame.MOUSEMOTION and dragging and state["mode"] == "EDIT":
+                x, y = event.pos
+                if DP_GRID_Y <= y < DP_GRID_Y + DP_GRID_H:
+                    cell = (
+                        (y - DP_GRID_Y) // DP_CELL,
+                        (x - DP_GRID_X) // DP_CELL
+                    )
+                    if cell != last_cell:
+                        toggle_wall(event.pos)
+                        last_cell = cell
+            for b in btns:
+                b.handle(event)
+
+        if state.get("_exit"):
+            return "menu"
+
+        now = pygame.time.get_ticks()
+
+        # advance fill animation
+        if state["mode"] == "FILLING":
+            elapsed = now - state["fill_start_ms"]
+            if elapsed >= len(state["fill_order"]) * DP_FILL_DELAY_MS + 250:
+                state["mode"] = "DONE"
+                new_path()
+
+        # Render
+        scr.blit(bg, (0, 0))
+        draw_header(
+            "DP Grid Path Counter",
+            "click cells to toggle walls   SPACE: run or new path   ESC: back",
+            fonts,
+        )
+
+        max_val = state["dp"][DP_ROWS - 1][DP_COLS - 1] if state["mode"] != "EDIT" else 0
+        title_text = (
+            f"total paths: {_dp_format(state['total_paths'])}"
+            if   (state["mode"] != "EDIT")
+            else ("place walls then press SPACE")
+        )
+        scr.blit(
+            fonts['body'].render(title_text, True, TEXT),
+            (40, HEADER_HEIGHT + 15)
+        )
+
+        path_idx = {cell: i for i, cell in enumerate(state["path"])}
+
+        for r in range(DP_ROWS):
+            for c in range(DP_COLS):
+                rect = pygame.Rect(
+                    (DP_GRID_X + (c * DP_CELL) + DP_PAD),
+                    (DP_GRID_Y + (r * DP_CELL) + DP_PAD),
+                    (DP_CELL - (2 * DP_PAD)),
+                    (DP_CELL - (2 * DP_PAD)),
+                )
+                if wall[r][c]:
+                    pygame.draw.rect(
+                        scr,
+                        WALL_COLOUR,
+                        rect,
+                        border_radius=DP_CORNER
+                    )
+                    continue
+
+                if state["mode"] != "EDIT" and max_val > 0:
+                    t = math.log1p(state["dp"][r][c]) / math.log1p(max_val)
+                    base = lerp(
+                        EMPTY_COLOUR,
+                        (125, 170, 247),
+                        t
+                    )
+                else:
+                    base = EMPTY_COLOUR
+
+                if state["mode"] == "FILLING":
+                    elapsed  = now - state["fill_start_ms"]
+                    idx      = r * DP_COLS + c
+                    reveal_t = (elapsed - idx * DP_FILL_DELAY_MS) / 250
+                    reveal   = max(0.0, min(1.0, reveal_t))
+                    base     = lerp(
+                        EMPTY_COLOUR,
+                        base,
+                        reveal
+                    )
+
+                if (r, c) in path_idx:
+                    p_idx     = path_idx[(r, c)]
+                    p_elapsed = now - state["path_start_ms"]
+                    if p_idx * DP_PATH_DELAY_MS <= p_elapsed:
+                        pulse  = (math.sin(now / 280 + p_idx * 0.25) + 1) * 0.5
+                        path_c = lerp(
+                            PATH_COLOUR,
+                            PATH_GLOW,
+                            pulse * 0.4
+                        )
+                        base   = lerp(
+                            base,
+                            path_c,
+                            0.85
+                        )
+
+                if (r, c) == (0, 0):
+                    pulse = (math.sin(now / 280) + 1) * 0.5
+                    base  = lerp(
+                        base,
+                        lerp(
+                            START_COLOUR,
+                            START_GLOW,
+                            pulse * 0.5
+                        ),
+                        0.9
+                    )
+                elif (r, c) == (DP_ROWS - 1, DP_COLS - 1):
+                    pulse = (math.sin(now / 280 + 1.5) + 1) * 0.5
+                    base  = lerp(
+                        base,
+                        lerp(
+                            END_COLOUR,
+                            END_GLOW,
+                            pulse * 0.5
+                        ),
+                        0.9
+                    )
+
+                pygame.draw.rect(
+                    scr,
+                    base,
+                    rect,
+                    border_radius=DP_CORNER
+                )
+
+                if state["mode"] != "EDIT" and state["dp"][r][c] > 0:
+                    text = _dp_format(state["dp"][r][c])
+                    t    = fonts['small'].render(
+                        text,
+                        True,
+                        TEXT
+                    )
+                    scr.blit(
+                        t,
+                        (
+                            rect.centerx - t.get_width()  / 2,
+                            rect.centery - t.get_height() / 2,
+                        )
+                    )
+
+        for b in btns:
+            b.draw(scr, fonts['body'])
+
+        pygame.display.flip()
+        CLOCK.tick(60)
+
+
+def run_picker(fonts):
+    """Cards-style picker. Click one to enter that puzzle. ESC to exit."""
+    scr = screen()
+    bg     = make_background()
+
+    choice: dict[str, str | None] = {"value": None}
+
+    def pick_path():   choice["value"] = "pathfinding"
+    def pick_event():  choice["value"] = "event_queue"
+    def pick_dp():     choice["value"] = "dp_grid"
+
+    card_w, card_h = 220, 280
+    gap            = 30
+    total_w        = card_w * 3 + gap * 2
+    start_x        = (WIDTH - total_w) // 2
+    card_y         = HEADER_HEIGHT + 90
+
+    cards = [
+        ("Pathfinding", "A* search with",   "interactive walls",  pick_path),
+        ("Event Queue", "Priority heap +",  "discrete-event sim", pick_event),
+        ("DP Grid",     "Count paths with", "dynamic programming",pick_dp),
+    ]
+    card_rects = [
+        pygame.Rect(start_x + i * (card_w + gap), card_y, card_w, card_h)
+        for i in range(3)
+    ]
+
+    btn_back = Button(
+        (WIDTH - 100, HEIGHT - 50, 80, 36),
+        "BACK",
+        lambda: choice.update(value="exit")
+    )
+
+    while choice["value"] is None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return "exit"
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                for rect, (_, _, _, callback) in zip(card_rects, cards):
+                    if rect.collidepoint(event.pos):
+                        callback()
+                        break
+            btn_back.handle(event)
+
+        now = pygame.time.get_ticks()
+        scr.blit(bg, (0, 0))
+        draw_header(
+            "Puzzles",
+            "pick a visualiser   ESC to return to main menu",
+            fonts,
+        )
+
+        mouse_pos = pygame.mouse.get_pos()
+        for rect, (title, line1, line2, _) in zip(card_rects, cards):
+            hovered = rect.collidepoint(mouse_pos)
+            pulse   = (math.sin(now / 600) + 1) * 0.5
+            base    = lerp(
+                BG_PANEL,
+                (235, 240, 255),
+                pulse * 0.6
+            )
+            if hovered:
+                base = lerp(
+                    base,
+                    (255, 255, 255),
+                    0.5
+                )
+            pygame.draw.rect(
+                scr,
+                base,
+                rect,
+                border_radius=12
+            )
+            pygame.draw.rect(
+                scr,
+                LINE_PANEL,
+                rect,
+                width=2,
+                border_radius=12
+            )
+
+            t_title = fonts['title'].render(
+                title,
+                True,
+                TEXT
+            )
+            scr.blit(
+                t_title,
+                (rect.centerx - t_title.get_width() // 2, rect.y + 30)
+            )
+            t_line1 = fonts['body'].render(
+                line1,
+                True,
+                DIM
+            )
+            t_line2 = fonts['body'].render(
+                line2,
+                True,
+                DIM
+            )
+            scr.blit(
+                t_line1,
+                (rect.centerx - t_line1.get_width() // 2, rect.y + 120)
+            )
+            scr.blit(
+                t_line2,
+                (rect.centerx - t_line2.get_width() // 2, rect.y + 150)
+            )
+
+            t_hint = fonts['small'].render(
+                "click to open",
+                True,
+                (
+                    TXT_SUCCESS
+                    if   (hovered)
+                    else (DIM)
+                )
+            )
+            scr.blit(
+                t_hint,
+                (rect.centerx - t_hint.get_width() // 2, rect.y + 230)
+            )
+
+        btn_back.draw(scr, fonts['body'])
+
+        pygame.display.flip()
+        CLOCK.tick(60)
+
+    return choice["value"]
+
+
+def puzzles_module() -> None:
+    """
+    Puzzles module — three interactive visualisers:
+
+    1. Pathfinding   — A* on a clickable grid
+    2. Event Queue   — priority-heap discrete-event simulator
+    3. DP Grid       — dynamic-programming path counter
+
+    Adapted from three reference files that originally depended on a separate
+    `ui.theme` module. That dependency has been replaced with a local `_theme`
+    namespace and `_Button` helper defined inside this file, so no external
+    `ui/` package is needed.
+
+    Controls
+        - Main picker:    click a card to enter, ESC to leave puzzles
+        - Inside any puzzle: ESC returns to the picker
+    """
+    fonts  = build_fonts()
+    choice = run_picker(fonts)
+
+    if choice in ("exit", None):
+        return
+    if choice == "quit":
+        pygame.quit()
+        exit()
+
+    if choice == "pathfinding":
+       result = run_pathfinding(fonts)
+    elif choice == "event_queue":
+       result = run_event_queue(fonts)
+    elif choice == "dp_grid":
+       result = run_dp_grid(fonts)
+    else:
+        result = "menu"
+
+    if result == "quit":
+        # ESC in a sub-puzzle returns straight to the main menu (single key press).
+        pygame.quit()
+        exit()
