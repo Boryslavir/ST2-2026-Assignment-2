@@ -137,7 +137,7 @@ def main() -> None:
             match current_module:
                 case 'Data Structures':
                     from modules.data_structures import data_structures_module
-                    data_structures_module(screen)
+                    data_structures_module(SCREEN)
 
                 case 'Sorting':
                     from modules.sorting import SortingModule
