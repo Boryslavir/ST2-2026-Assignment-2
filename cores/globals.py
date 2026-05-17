@@ -76,3 +76,16 @@ EQ_PRIO_NAMES:      list[str | None] = [
     "Low",
     "Trivial"
 ]
+
+# Puzzle 3
+DP_CELL:            int = 42
+DP_COLS:            int = 14
+DP_ROWS:            int = 9
+DP_GRID_W:          int = DP_COLS * DP_CELL
+DP_GRID_H:          int = DP_ROWS * DP_CELL
+DP_GRID_X:          int = (WIDTH - DP_GRID_W) // 2
+DP_GRID_Y:          int = HEADER_HEIGHT + 50
+DP_PAD:             int = 2
+DP_CORNER:          int = 6
+DP_FILL_DELAY_MS:   int = 35
+DP_PATH_DELAY_MS:   int = 70

@@ -8,6 +8,17 @@ from cores.globals import (
     BG_PANEL,
     CLOCK,
     DIM,
+    DP_CELL,
+    DP_COLS,
+    DP_CORNER,
+    DP_FILL_DELAY_MS,
+    DP_GRID_H,
+    DP_GRID_W,
+    DP_GRID_X,
+    DP_GRID_Y,
+    DP_PAD,
+    DP_PATH_DELAY_MS,
+    DP_ROWS,
     EDGE_COLOUR,
     EMPTY_COLOUR,
     END_COLOUR,
@@ -111,9 +122,24 @@ class Button:
             if   (self._hover)
             else (self.color)
         )
-        pygame.draw.rect(surface, fill,  self.rect, border_radius=6)
-        pygame.draw.rect(surface, TEXT, self.rect, width=1, border_radius=6)
-        text = font.render(self.label, True, TEXT)
+        pygame.draw.rect(
+            surface,
+            fill,
+            self.rect,
+            border_radius=6
+        )
+        pygame.draw.rect(
+            surface,
+            TEXT,
+            self.rect,
+            width=1,
+            border_radius=6
+        )
+        text = font.render(
+            self.label,
+            True,
+            TEXT
+        )
         surface.blit(text, (
             self.rect.centerx - text.get_width()  // 2,
             self.rect.centery - text.get_height() // 2,
@@ -378,7 +404,7 @@ def run_pathfinding(fonts):
                 pygame.draw.rect(scr, color, rect, border_radius=PF_CORNER)
 
         for b in btns:
-            b.draw(screen, fonts['body'])
+            b.draw(scr, fonts['body'])
 
         pygame.display.flip()
         CLOCK.tick(60)
@@ -412,7 +438,7 @@ def _eq_lerp_xy(a, b, t):
     return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
 
 
-def _run_event_queue(fonts):
+def run_event_queue(fonts):
     scr = screen()
     bg     = make_background()
 
@@ -652,7 +678,11 @@ def _run_event_queue(fonts):
                  bar_y + 12)
             )
         else:
-            t = fonts['small'].render("idle - waiting for events", True, theme.DIM)
+            t = fonts['small'].render(
+                "idle - waiting for events",
+                True,
+                DIM
+            )
             scr.blit(
                 t,
                 (WIDTH / 2 - t.get_width() / 2,
@@ -694,36 +724,19 @@ def _run_event_queue(fonts):
         )
 
         for b in btns:
-            b.draw(screen, fonts['body'])
+            b.draw(scr, fonts['body'])
 
         pygame.display.flip()
         CLOCK.tick(60)
 
 
-# =============================================================================
-#                  PUZZLE 3 — DP GRID PATH COUNTER
-# =============================================================================
-
-_DP_CELL   = 42
-_DP_COLS   = 14
-_DP_ROWS   = 9
-_DP_GRID_W = _DP_COLS * _DP_CELL
-_DP_GRID_H = _DP_ROWS * _DP_CELL
-_DP_GRID_X = (WIDTH - _DP_GRID_W) // 2
-_DP_GRID_Y = _HEADER_H + 50
-
-_DP_PAD    = 2
-_DP_CORNER = 6
-_DP_FILL_DELAY_MS = 35
-_DP_PATH_DELAY_MS = 70
-
-
+# Puzzle 3
 def _dp_compute(wall):
     """Standard 2-D path-count DP. Returns (table, fill_order, total)."""
-    dp         = [[0] * _DP_COLS for _ in range(_DP_ROWS)]
+    dp         = [[0] * DP_COLS for _ in range(DP_ROWS)]
     fill_order = []
-    for r in range(_DP_ROWS):
-        for c in range(_DP_COLS):
+    for r in range(DP_ROWS):
+        for c in range(DP_COLS):
             fill_order.append((r, c))
             if wall[r][c]:
                 continue
@@ -734,18 +747,26 @@ def _dp_compute(wall):
             if r > 0: v += dp[r - 1][c]
             if c > 0: v += dp[r][c - 1]
             dp[r][c] = v
-    return dp, fill_order, dp[_DP_ROWS - 1][_DP_COLS - 1]
+    return dp, fill_order, dp[DP_ROWS - 1][DP_COLS - 1]
 
 
 def _dp_sample_path(dp, wall):
     """Pick a random valid path, biased by sub-path counts."""
-    if dp[_DP_ROWS - 1][_DP_COLS - 1] == 0:
+    if dp[DP_ROWS - 1][DP_COLS - 1] == 0:
         return []
     r, c = 0, 0
     path = [(0, 0)]
-    while (r, c) != (_DP_ROWS - 1, _DP_COLS - 1):
-        right = dp[r][c + 1] if (c + 1 < _DP_COLS and not wall[r][c + 1]) else 0
-        down  = dp[r + 1][c] if (r + 1 < _DP_ROWS and not wall[r + 1][c]) else 0
+    while (r, c) != (DP_ROWS - 1, DP_COLS - 1):
+        right = (
+            dp[r][c + 1]
+            if   (c + 1 < DP_COLS and not wall[r][c + 1])
+            else (0)
+        )
+        down  = (
+            dp[r + 1][c]
+            if   (r + 1 < DP_ROWS and not wall[r + 1][c]) 
+            else (0)
+        )
         if right + down == 0:
             return path
         if random.random() < right / (right + down):
@@ -763,16 +784,20 @@ def _dp_format(n):
     return f"{n:.1e}"
 
 
-def _run_dp_grid(fonts):
-    screen = _screen()
-    bg     = theme.make_background()
-    wall   = [[False] * _DP_COLS for _ in range(_DP_ROWS)]
+def run_dp_grid(fonts):
+    scr = screen()
+    bg     = make_background()
+    wall   = [([False] * DP_COLS) for _ in range(DP_ROWS)]
     state  = {
-        "dp": [[0] * _DP_COLS for _ in range(_DP_ROWS)],
-        "fill_order": [], "fill_start_ms": 0,
-        "mode": "EDIT", "total_paths": 0,
-        "path": [], "path_start_ms": 0,
+        "dp": [([0] * DP_COLS) for _ in range(DP_ROWS)],
+        "fill_order": [],
+        "fill_start_ms": 0,
+        "mode": "EDIT",
+        "total_paths": 0,
+        "path": [],
+        "path_start_ms": 0
     }
+
 
     def start_fill():
         dp, order, total = _dp_compute(wall)
@@ -787,30 +812,36 @@ def _run_dp_grid(fonts):
         state["path"]          = _dp_sample_path(state["dp"], wall)
         state["path_start_ms"] = pygame.time.get_ticks()
 
+
     def reset_dp():
-        state["dp"]          = [[0] * _DP_COLS for _ in range(_DP_ROWS)]
+        state["dp"]          = [([0] * DP_COLS) for _ in range(DP_ROWS)]
         state["mode"]        = "EDIT"
         state["path"]        = []
         state["total_paths"] = 0
 
+
     def clear_all():
-        for r in range(_DP_ROWS):
-            for c in range(_DP_COLS):
+        for r in range(DP_ROWS):
+            for c in range(DP_COLS):
                 wall[r][c] = False
         reset_dp()
+
 
     def toggle_wall(pos):
         if state["mode"] != "EDIT":
             return
         x, y = pos
-        if not (_DP_GRID_X <= x < _DP_GRID_X + _DP_GRID_W and
-                _DP_GRID_Y <= y < _DP_GRID_Y + _DP_GRID_H):
+        if not (
+            (DP_GRID_X <= x < (DP_GRID_X + DP_GRID_W)) and
+            (DP_GRID_Y <= y < (DP_GRID_Y + DP_GRID_H))
+        ):
             return
-        c = (x - _DP_GRID_X) // _DP_CELL
-        r = (y - _DP_GRID_Y) // _DP_CELL
-        if (r, c) == (0, 0) or (r, c) == (_DP_ROWS - 1, _DP_COLS - 1):
+        c = (x - DP_GRID_X) // DP_CELL
+        r = (y - DP_GRID_Y) // DP_CELL
+        if (r, c) == (0, 0) or (r, c) == (DP_ROWS - 1, DP_COLS - 1):
             return
         wall[r][c] = not wall[r][c]
+
 
     def space_action():
         if state["mode"] == "EDIT":
@@ -819,12 +850,28 @@ def _run_dp_grid(fonts):
             new_path()
 
     btns = [
-        theme.Button((40,  555, 140, 36), "RUN / NEW PATH",
-                     space_action, color=theme.SUCCESS),
-        theme.Button((190, 555, 100, 36), "RESET DP", reset_dp),
-        theme.Button((300, 555, 80,  36), "CLEAR", clear_all, color=theme.DANGER),
-        theme.Button((WIDTH - 100, 555, 80, 36), "BACK",
-                     lambda: state.update(_exit=True)),
+        Button(
+            (40,  555, 140, 36),
+            "RUN / NEW PATH",
+            space_action,
+            color=TXT_SUCCESS
+        ),
+        Button(
+            (190, 555, 100, 36),
+            "RESET DP",
+            reset_dp
+        ),
+        Button(
+            (300, 555, 80,  36),
+            "CLEAR",
+            clear_all,
+            color=TXT_DANGER
+        ),
+        Button(
+            (WIDTH - 100, 555, 80, 36),
+            "BACK",
+            lambda: state.update(_exit=True)
+        ),
     ]
 
     dragging  = False
@@ -841,17 +888,21 @@ def _run_dp_grid(fonts):
                 toggle_wall(event.pos)
                 dragging = True
                 x, y = event.pos
-                if _DP_GRID_Y <= y < _DP_GRID_Y + _DP_GRID_H:
-                    last_cell = ((y - _DP_GRID_Y) // _DP_CELL,
-                                 (x - _DP_GRID_X) // _DP_CELL)
+                if DP_GRID_Y <= y < DP_GRID_Y + DP_GRID_H:
+                    last_cell = (
+                        (y - DP_GRID_Y) // DP_CELL,
+                        (x - DP_GRID_X) // DP_CELL
+                    )
             if event.type == pygame.MOUSEBUTTONUP:
                 dragging  = False
                 last_cell = None
             if event.type == pygame.MOUSEMOTION and dragging and state["mode"] == "EDIT":
                 x, y = event.pos
-                if _DP_GRID_Y <= y < _DP_GRID_Y + _DP_GRID_H:
-                    cell = ((y - _DP_GRID_Y) // _DP_CELL,
-                            (x - _DP_GRID_X) // _DP_CELL)
+                if DP_GRID_Y <= y < DP_GRID_Y + DP_GRID_H:
+                    cell = (
+                        (y - DP_GRID_Y) // DP_CELL,
+                        (x - DP_GRID_X) // DP_CELL
+                    )
                     if cell != last_cell:
                         toggle_wall(event.pos)
                         last_cell = cell
@@ -866,91 +917,143 @@ def _run_dp_grid(fonts):
         # advance fill animation
         if state["mode"] == "FILLING":
             elapsed = now - state["fill_start_ms"]
-            if elapsed >= len(state["fill_order"]) * _DP_FILL_DELAY_MS + 250:
+            if elapsed >= len(state["fill_order"]) * DP_FILL_DELAY_MS + 250:
                 state["mode"] = "DONE"
                 new_path()
 
         # Render
-        screen.blit(bg, (0, 0))
-        theme.draw_header(
+        scr.blit(bg, (0, 0))
+        draw_header(
             "DP Grid Path Counter",
             "click cells to toggle walls   SPACE: run or new path   ESC: back",
             fonts,
         )
 
-        max_val = state["dp"][_DP_ROWS - 1][_DP_COLS - 1] if state["mode"] != "EDIT" else 0
-        title_text = (f"total paths: {_dp_format(state['total_paths'])}"
-                      if state["mode"] != "EDIT" else "place walls then press SPACE")
-        screen.blit(fonts['body'].render(title_text, True, theme.TEXT),
-                    (40, _HEADER_H + 15))
+        max_val = state["dp"][DP_ROWS - 1][DP_COLS - 1] if state["mode"] != "EDIT" else 0
+        title_text = (
+            f"total paths: {_dp_format(state['total_paths'])}"
+            if   (state["mode"] != "EDIT")
+            else ("place walls then press SPACE")
+        )
+        scr.blit(
+            fonts['body'].render(title_text, True, TEXT),
+            (40, HEADER_HEIGHT + 15)
+        )
 
         path_idx = {cell: i for i, cell in enumerate(state["path"])}
 
-        for r in range(_DP_ROWS):
-            for c in range(_DP_COLS):
+        for r in range(DP_ROWS):
+            for c in range(DP_COLS):
                 rect = pygame.Rect(
-                    _DP_GRID_X + c * _DP_CELL + _DP_PAD,
-                    _DP_GRID_Y + r * _DP_CELL + _DP_PAD,
-                    _DP_CELL - 2 * _DP_PAD,
-                    _DP_CELL - 2 * _DP_PAD,
+                    (DP_GRID_X + (c * DP_CELL) + DP_PAD),
+                    (DP_GRID_Y + (r * DP_CELL) + DP_PAD),
+                    (DP_CELL - (2 * DP_PAD)),
+                    (DP_CELL - (2 * DP_PAD)),
                 )
                 if wall[r][c]:
-                    pygame.draw.rect(screen, theme.WALL_COL, rect, border_radius=_DP_CORNER)
+                    pygame.draw.rect(
+                        scr,
+                        WALL_COLOUR,
+                        rect,
+                        border_radius=DP_CORNER
+                    )
                     continue
 
                 if state["mode"] != "EDIT" and max_val > 0:
                     t = math.log1p(state["dp"][r][c]) / math.log1p(max_val)
-                    base = theme.lerp(theme.EMPTY_COL, (125, 170, 247), t)
+                    base = lerp(
+                        EMPTY_COLOUR,
+                        (125, 170, 247),
+                        t
+                    )
                 else:
-                    base = theme.EMPTY_COL
+                    base = EMPTY_COLOUR
 
                 if state["mode"] == "FILLING":
                     elapsed  = now - state["fill_start_ms"]
-                    idx      = r * _DP_COLS + c
-                    reveal_t = (elapsed - idx * _DP_FILL_DELAY_MS) / 250
+                    idx      = r * DP_COLS + c
+                    reveal_t = (elapsed - idx * DP_FILL_DELAY_MS) / 250
                     reveal   = max(0.0, min(1.0, reveal_t))
-                    base     = theme.lerp(theme.EMPTY_COL, base, reveal)
+                    base     = lerp(
+                        EMPTY_COLOUR,
+                        base,
+                        reveal
+                    )
 
                 if (r, c) in path_idx:
                     p_idx     = path_idx[(r, c)]
                     p_elapsed = now - state["path_start_ms"]
-                    if p_idx * _DP_PATH_DELAY_MS <= p_elapsed:
+                    if p_idx * DP_PATH_DELAY_MS <= p_elapsed:
                         pulse  = (math.sin(now / 280 + p_idx * 0.25) + 1) * 0.5
-                        path_c = theme.lerp(theme.PATH_COL, theme.PATH_GLOW, pulse * 0.4)
-                        base   = theme.lerp(base, path_c, 0.85)
+                        path_c = lerp(
+                            PATH_COLOUR,
+                            PATH_GLOW,
+                            pulse * 0.4
+                        )
+                        base   = lerp(
+                            base,
+                            path_c,
+                            0.85
+                        )
 
                 if (r, c) == (0, 0):
                     pulse = (math.sin(now / 280) + 1) * 0.5
-                    base  = theme.lerp(base, theme.lerp(
-                        theme.START_COL, theme.START_GLOW, pulse * 0.5), 0.9)
-                elif (r, c) == (_DP_ROWS - 1, _DP_COLS - 1):
+                    base  = lerp(
+                        base,
+                        lerp(
+                            START_COLOUR,
+                            START_GLOW,
+                            pulse * 0.5
+                        ),
+                        0.9
+                    )
+                elif (r, c) == (DP_ROWS - 1, DP_COLS - 1):
                     pulse = (math.sin(now / 280 + 1.5) + 1) * 0.5
-                    base  = theme.lerp(base, theme.lerp(
-                        theme.END_COL, theme.END_GLOW, pulse * 0.5), 0.9)
+                    base  = lerp(
+                        base,
+                        lerp(
+                            END_COLOUR,
+                            END_GLOW,
+                            pulse * 0.5
+                        ),
+                        0.9
+                    )
 
-                pygame.draw.rect(screen, base, rect, border_radius=_DP_CORNER)
+                pygame.draw.rect(
+                    scr,
+                    base,
+                    rect,
+                    border_radius=DP_CORNER
+                )
 
                 if state["mode"] != "EDIT" and state["dp"][r][c] > 0:
                     text = _dp_format(state["dp"][r][c])
-                    t    = fonts['small'].render(text, True, theme.TEXT)
-                    screen.blit(t, (
-                        rect.centerx - t.get_width()  / 2,
-                        rect.centery - t.get_height() / 2,
-                    ))
+                    t    = fonts['small'].render(
+                        text,
+                        True,
+                        TEXT
+                    )
+                    scr.blit(
+                        t,
+                        (
+                            rect.centerx - t.get_width()  / 2,
+                            rect.centery - t.get_height() / 2,
+                        )
+                    )
 
         for b in btns:
-            b.draw(screen, fonts['body'])
+            b.draw(scr, fonts['body'])
 
         pygame.display.flip()
         CLOCK.tick(60)
 
 
-def _run_picker(fonts):
+def run_picker(fonts):
     """Cards-style picker. Click one to enter that puzzle. ESC to exit."""
-    screen = _screen()
-    bg     = theme.make_background()
+    scr = screen()
+    bg     = make_background()
 
-    choice = {"value": None}
+    choice: dict[str, str | None] = {"value": None}
 
     def pick_path():   choice["value"] = "pathfinding"
     def pick_event():  choice["value"] = "event_queue"
@@ -960,7 +1063,7 @@ def _run_picker(fonts):
     gap            = 30
     total_w        = card_w * 3 + gap * 2
     start_x        = (WIDTH - total_w) // 2
-    card_y         = _HEADER_H + 90
+    card_y         = HEADER_HEIGHT + 90
 
     cards = [
         ("Pathfinding", "A* search with",   "interactive walls",  pick_path),
@@ -972,9 +1075,10 @@ def _run_picker(fonts):
         for i in range(3)
     ]
 
-    btn_back = theme.Button(
-        (WIDTH - 100, HEIGHT - 50, 80, 36), "BACK",
-        lambda: choice.update(value="exit"),
+    btn_back = Button(
+        (WIDTH - 100, HEIGHT - 50, 80, 36),
+        "BACK",
+        lambda: choice.update(value="exit")
     )
 
     while choice["value"] is None:
@@ -991,8 +1095,8 @@ def _run_picker(fonts):
             btn_back.handle(event)
 
         now = pygame.time.get_ticks()
-        screen.blit(bg, (0, 0))
-        theme.draw_header(
+        scr.blit(bg, (0, 0))
+        draw_header(
             "Puzzles",
             "pick a visualiser   ESC to return to main menu",
             fonts,
@@ -1002,24 +1106,74 @@ def _run_picker(fonts):
         for rect, (title, line1, line2, _) in zip(card_rects, cards):
             hovered = rect.collidepoint(mouse_pos)
             pulse   = (math.sin(now / 600) + 1) * 0.5
-            base    = theme.lerp(theme.PANEL_BG, (235, 240, 255), pulse * 0.6)
+            base    = lerp(
+                BG_PANEL,
+                (235, 240, 255),
+                pulse * 0.6
+            )
             if hovered:
-                base = theme.lerp(base, (255, 255, 255), 0.5)
-            pygame.draw.rect(screen, base, rect, border_radius=12)
-            pygame.draw.rect(screen, theme.PANEL_LINE, rect, width=2, border_radius=12)
+                base = lerp(
+                    base,
+                    (255, 255, 255),
+                    0.5
+                )
+            pygame.draw.rect(
+                scr,
+                base,
+                rect,
+                border_radius=12
+            )
+            pygame.draw.rect(
+                scr,
+                LINE_PANEL,
+                rect,
+                width=2,
+                border_radius=12
+            )
 
-            t_title = fonts['title'].render(title, True, theme.TEXT)
-            screen.blit(t_title, (rect.centerx - t_title.get_width() // 2, rect.y + 30))
-            t_line1 = fonts['body'].render(line1, True, theme.DIM)
-            t_line2 = fonts['body'].render(line2, True, theme.DIM)
-            screen.blit(t_line1, (rect.centerx - t_line1.get_width() // 2, rect.y + 120))
-            screen.blit(t_line2, (rect.centerx - t_line2.get_width() // 2, rect.y + 150))
+            t_title = fonts['title'].render(
+                title,
+                True,
+                TEXT
+            )
+            scr.blit(
+                t_title,
+                (rect.centerx - t_title.get_width() // 2, rect.y + 30)
+            )
+            t_line1 = fonts['body'].render(
+                line1,
+                True,
+                DIM
+            )
+            t_line2 = fonts['body'].render(
+                line2,
+                True,
+                DIM
+            )
+            scr.blit(
+                t_line1,
+                (rect.centerx - t_line1.get_width() // 2, rect.y + 120)
+            )
+            scr.blit(
+                t_line2,
+                (rect.centerx - t_line2.get_width() // 2, rect.y + 150)
+            )
 
-            t_hint = fonts['small'].render("click to open", True,
-                                           theme.SUCCESS if hovered else theme.DIM)
-            screen.blit(t_hint, (rect.centerx - t_hint.get_width() // 2, rect.y + 230))
+            t_hint = fonts['small'].render(
+                "click to open",
+                True,
+                (
+                    TXT_SUCCESS
+                    if   (hovered)
+                    else (DIM)
+                )
+            )
+            scr.blit(
+                t_hint,
+                (rect.centerx - t_hint.get_width() // 2, rect.y + 230)
+            )
 
-        btn_back.draw(screen, fonts['body'])
+        btn_back.draw(scr, fonts['body'])
 
         pygame.display.flip()
         CLOCK.tick(60)
@@ -1044,8 +1198,8 @@ def puzzles_module() -> None:
         - Main picker:    click a card to enter, ESC to leave puzzles
         - Inside any puzzle: ESC returns to the picker
     """
-    fonts  = _build_fonts()
-    choice = _run_picker(fonts)
+    fonts  = build_fonts()
+    choice = run_picker(fonts)
 
     if choice in ("exit", None):
         return
@@ -1054,11 +1208,11 @@ def puzzles_module() -> None:
         exit()
 
     if choice == "pathfinding":
-       result = _run_pathfinding(fonts)
+       result = run_pathfinding(fonts)
     elif choice == "event_queue":
-       result = _run_event_queue(fonts)
+       result = run_event_queue(fonts)
     elif choice == "dp_grid":
-       result = _run_dp_grid(fonts)
+       result = run_dp_grid(fonts)
     else:
         result = "menu"
 
