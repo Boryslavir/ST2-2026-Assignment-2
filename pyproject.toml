@@ -1,0 +1,9 @@
+[project]
+name = "st2-2026-assignment-2"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pygame>=2.6.1",
+]
