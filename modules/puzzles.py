@@ -8,9 +8,21 @@ from cores.globals import (
     BG_PANEL,
     CLOCK,
     DIM,
+    EDGE_COLOUR,
     EMPTY_COLOUR,
     END_COLOUR,
     END_GLOW,
+    EQ_ARRIVAL_MEAN_S,
+    EQ_HEAP_H,
+    EQ_HEAP_Y_BASE,
+    EQ_LEVEL_GAP,
+    EQ_NODE_R,
+    EQ_PRIO_NAMES,
+    EQ_PROCESS_H,
+    EQ_PROCESS_Y,
+    EQ_SERVICE_MAX_S,
+    EQ_SERVICE_MIN_S,
+    EQ_TOP_MARGIN,
     FRONTIER_COLOUR,
     HEADER_HEIGHT,
     HEIGHT,
@@ -29,11 +41,13 @@ from cores.globals import (
     PF_PATH_REVEAL_MS,
     PF_ROWS,
     PF_STEPS_PER_FRAME,
+    PRIO_COLOUR,
     START_COLOUR,
     START_GLOW,
     TEXT,
     TXT_DANGER,
     TXT_SUCCESS,
+    TXT_WARNING,
     VISITED_COLOUR,
     WALL_COLOUR,
     WIDTH
@@ -71,6 +85,7 @@ def draw_header(title: str, subtitle: str, fonts) -> None:
     screen().blit(fonts['small'].render(subtitle, True, DIM), (20, 38))
 
 
+# Puzzle 1
 class Button:
     """Minimal clickable button with label and optional fill colour."""
 
@@ -369,28 +384,10 @@ def run_pathfinding(fonts):
         CLOCK.tick(60)
 
 
-# =============================================================================
-#                  PUZZLE 2 — EVENT QUEUE SIMULATOR (heap)
-# =============================================================================
 
-_EQ_HEAP_Y_BASE = _HEADER_H + 30
-_EQ_HEAP_H      = 230
-_EQ_PROCESS_Y   = _EQ_HEAP_Y_BASE + _EQ_HEAP_H + 5
-_EQ_PROCESS_H   = 150
-
-_EQ_NODE_R     = 18
-_EQ_LEVEL_GAP  = 60
-_EQ_TOP_MARGIN = _EQ_HEAP_Y_BASE + 25
-
-_EQ_ARRIVAL_MEAN_S = 1.4
-_EQ_SERVICE_MIN_S  = 0.8
-_EQ_SERVICE_MAX_S  = 2.5
-
-_EQ_PRIO_NAMES = [None, "Critical", "High", "Med", "Low", "Trivial"]
-
-
+# Puzzle 2
 @dataclass(order=True)
-class _EQEvent:
+class EQEvent:
     priority:    int
     seq:         int
     label:       str   = field(compare=False)
@@ -407,7 +404,7 @@ def _eq_heap_pos(index, heap_size):
     count        = 2 ** level
     avail_w      = WIDTH - 60
     x = 30 + avail_w * (pos_in_level + 0.5) / count
-    y = _EQ_TOP_MARGIN + level * _EQ_LEVEL_GAP
+    y = EQ_TOP_MARGIN + level * EQ_LEVEL_GAP
     return (x, y)
 
 
@@ -416,8 +413,8 @@ def _eq_lerp_xy(a, b, t):
 
 
 def _run_event_queue(fonts):
-    screen = _screen()
-    bg     = theme.make_background()
+    scr = screen()
+    bg     = make_background()
 
     state = {
         "running": True, "sim_time": 0.0, "sim_speed": 1.0,
@@ -436,20 +433,20 @@ def _run_event_queue(fonts):
         if priority is None:
             priority = random.choices([1, 2, 3, 4, 5], weights=[1, 2, 3, 2, 1])[0]
         state["seq"] += 1
-        ev = _EQEvent(
+        ev = EQEvent(
             priority=priority,
             seq=state["seq"],
             label=f"E{next_id()}",
             arrival_t=state["sim_time"],
-            service_dur=random.uniform(_EQ_SERVICE_MIN_S, _EQ_SERVICE_MAX_S),
+            service_dur=random.uniform(EQ_SERVICE_MIN_S, EQ_SERVICE_MAX_S),
             cx=WIDTH / 2 + random.uniform(-30, 30),
-            cy=_EQ_HEAP_Y_BASE - 40,
+            cy=EQ_HEAP_Y_BASE - 40,
             born_ms=pygame.time.get_ticks(),
         )
         heapq.heappush(state["heap"], ev)
 
     def schedule_next():
-        state["next_arrival_t"] = state["sim_time"] + random.expovariate(1.0 / _EQ_ARRIVAL_MEAN_S)
+        state["next_arrival_t"] = state["sim_time"] + random.expovariate(1.0 / EQ_ARRIVAL_MEAN_S)
 
     def reset():
         state.update({
@@ -461,18 +458,38 @@ def _run_event_queue(fonts):
         schedule_next()
 
     btns = [
-        theme.Button((40,  555, 130, 36), "PAUSE / RESUME",
-                     lambda: state.update(running=not state["running"]),
-                     color=theme.WARNING),
-        theme.Button((180, 555, 60,  36), "SLOW",
-                     lambda: state.update(sim_speed=max(0.1, state["sim_speed"] / 1.4))),
-        theme.Button((250, 555, 60,  36), "FAST",
-                     lambda: state.update(sim_speed=min(8.0, state["sim_speed"] * 1.4))),
-        theme.Button((320, 555, 90,  36), "INJECT",
-                     lambda: spawn(priority=1), color=theme.DANGER),
-        theme.Button((420, 555, 70,  36), "RESET", reset),
-        theme.Button((WIDTH - 100, 555, 80, 36), "BACK",
-                     lambda: state.update(_exit=True)),
+        Button(
+            (40,  555, 130, 36),
+            "PAUSE / RESUME",
+            lambda: state.update(running=not state["running"]),
+            color=TXT_WARNING
+        ),
+        Button(
+            (180, 555, 60,  36),
+            "SLOW",
+            lambda: state.update(sim_speed=max(0.1, state["sim_speed"] / 1.4))
+        ),
+        Button(
+            (250, 555, 60,  36),
+            "FAST",
+            lambda: state.update(sim_speed=min(8.0, state["sim_speed"] * 1.4))
+        ),
+        Button(
+            (320, 555, 90,  36),
+            "INJECT",
+            lambda: spawn(priority=1),
+            color=TXT_DANGER
+        ),
+        Button(
+            (420, 555, 70,  36),
+            "RESET",
+            reset
+        ),
+        Button(
+            (WIDTH - 100, 555, 80, 36),
+            "BACK",
+            lambda: state.update(_exit=True)
+        )
     ]
 
     schedule_next()
@@ -515,92 +532,153 @@ def _run_event_queue(fonts):
             tx, ty = _eq_heap_pos(i, len(state["heap"]))
             ev.cx, ev.cy = _eq_lerp_xy((ev.cx, ev.cy), (tx, ty), 0.18)
         if state["server"]:
-            target = (WIDTH / 2, _EQ_PROCESS_Y + _EQ_PROCESS_H / 2 - 18)
+            target = (WIDTH / 2, EQ_PROCESS_Y + EQ_PROCESS_H / 2 - 18)
             state["server"].cx, state["server"].cy = _eq_lerp_xy(
                 (state["server"].cx, state["server"].cy), target, 0.22)
 
         # Render
-        screen.blit(bg, (0, 0))
-        theme.draw_header(
+        scr.blit(bg, (0, 0))
+        draw_header(
             "Event Queue Simulator",
             "min-heap priority queue with discrete-event simulation   ESC: back",
             fonts,
         )
 
         # Heap panel
-        pygame.draw.rect(screen, theme.PANEL_BG, (0, _EQ_HEAP_Y_BASE, WIDTH, _EQ_HEAP_H))
-        screen.blit(fonts['small'].render("PRIORITY HEAP", True, theme.DIM),
-                    (16, _EQ_HEAP_Y_BASE + 6))
-        screen.blit(fonts['small'].render(f"size {len(state['heap'])}", True, theme.DIM),
-                    (WIDTH - 90, _EQ_HEAP_Y_BASE + 6))
+        pygame.draw.rect(scr, BG_PANEL, (0, EQ_HEAP_Y_BASE, WIDTH, EQ_HEAP_H))
+        scr.blit(
+            fonts['small'].render("PRIORITY HEAP", True, DIM),
+            (16, EQ_HEAP_Y_BASE + 6)
+        )
+        scr.blit(
+            fonts['small'].render(f"size {len(state['heap'])}", True, DIM),
+            (WIDTH - 90, EQ_HEAP_Y_BASE + 6)
+        )
 
         # Edges parent -> child
         for i in range(1, len(state["heap"])):
             p = state["heap"][(i - 1) // 2]
             c = state["heap"][i]
-            pygame.draw.line(screen, theme.EDGE_COL, (p.cx, p.cy), (c.cx, c.cy), 2)
+            pygame.draw.line(
+                scr,
+                EDGE_COLOUR,
+                (p.cx, p.cy),
+                (c.cx, c.cy),
+                2
+            )
 
         # Nodes
         for i, ev in enumerate(state["heap"]):
-            color = theme.PRIO_COL[ev.priority]
+            color = PRIO_COLOUR[ev.priority]
             age   = now_ms - ev.born_ms
             pop_t = min(1.0, age / 220)
-            r = int(_EQ_NODE_R * (0.4 + 0.6 * pop_t))
-            pygame.draw.circle(screen, color, (int(ev.cx), int(ev.cy)), r)
+            r = int(EQ_NODE_R * (0.4 + 0.6 * pop_t))
+            pygame.draw.circle(scr, color, (int(ev.cx), int(ev.cy)), r)
             label = fonts['small'].render(ev.label, True, (20, 22, 35))
-            screen.blit(label, (ev.cx - label.get_width() / 2,
-                                ev.cy - label.get_height() / 2))
+            scr.blit(
+                label,
+                (ev.cx - label.get_width() / 2,
+                ev.cy - label.get_height() / 2)
+            )
             if i == 0:
-                pygame.draw.circle(screen, (255, 255, 255),
-                                   (int(ev.cx), int(ev.cy)), r + 3, 2)
+                pygame.draw.circle(
+                    scr,
+                    (255, 255, 255),
+                    (int(ev.cx), int(ev.cy)),
+                    r + 3, 2
+                )
 
         # Server panel
-        pygame.draw.line(screen, theme.PANEL_LINE,
-                         (0, _EQ_PROCESS_Y), (WIDTH, _EQ_PROCESS_Y), 1)
-        screen.blit(fonts['small'].render("SERVER", True, theme.DIM),
-                    (16, _EQ_PROCESS_Y + 6))
+        pygame.draw.line(
+            scr,
+            LINE_PANEL,
+            (0, EQ_PROCESS_Y),
+            (WIDTH, EQ_PROCESS_Y),
+            1
+        )
+        scr.blit(
+            fonts['small'].render("SERVER", True, DIM),
+            (16, EQ_PROCESS_Y + 6)
+        )
 
-        centre = (WIDTH / 2, _EQ_PROCESS_Y + _EQ_PROCESS_H / 2 - 18)
-        pygame.draw.circle(screen, theme.PANEL_LINE,
-                           (int(centre[0]), int(centre[1])), _EQ_NODE_R + 8, 2)
+        centre = (WIDTH / 2, EQ_PROCESS_Y + EQ_PROCESS_H / 2 - 18)
+        pygame.draw.circle(
+            scr,
+            LINE_PANEL,
+            (int(centre[0]), int(centre[1])), EQ_NODE_R + 8,
+            2
+        )
 
         if state["server"]:
             ev = state["server"]
-            color = theme.PRIO_COL[ev.priority]
-            pygame.draw.circle(screen, color, (int(ev.cx), int(ev.cy)), _EQ_NODE_R)
+            color = PRIO_COLOUR[ev.priority]
+            pygame.draw.circle(
+                scr,
+                color,
+                (int(ev.cx),
+                 int(ev.cy)),
+                EQ_NODE_R
+            )
             label = fonts['small'].render(ev.label, True, (20, 22, 35))
-            screen.blit(label, (ev.cx - label.get_width() / 2,
-                                ev.cy - label.get_height() / 2))
+            scr.blit(
+                label,
+                (ev.cx - label.get_width() / 2,
+                ev.cy - label.get_height() / 2)
+            )
 
             prog  = min(1.0, (state["sim_time"] - state["server_start_t"]) / ev.service_dur)
             bar_x = WIDTH / 2 - 150
-            bar_y = _EQ_PROCESS_Y + _EQ_PROCESS_H / 2 + 14
-            pygame.draw.rect(screen, theme.PANEL_LINE,
-                             (bar_x, bar_y, 300, 6), border_radius=3)
-            pygame.draw.rect(screen, color,
-                             (bar_x, bar_y, 300 * prog, 6), border_radius=3)
-            info = fonts['small'].render(
-                f"{ev.label} | {_EQ_PRIO_NAMES[ev.priority]} | "
-                f"waited {state['sim_time'] - ev.arrival_t:.1f}s",
-                True, theme.TEXT,
+            bar_y = EQ_PROCESS_Y + EQ_PROCESS_H / 2 + 14
+            pygame.draw.rect(
+                scr,
+                LINE_PANEL,
+                (bar_x, bar_y, 300, 6),
+                border_radius=3
             )
-            screen.blit(info, (WIDTH / 2 - info.get_width() / 2, bar_y + 12))
+            pygame.draw.rect(
+                scr,
+                color,
+                (bar_x, bar_y, 300 * prog, 6),
+                border_radius=3
+            )
+            info = fonts['small'].render(
+                f"{ev.label} | {EQ_PRIO_NAMES[ev.priority]} | "
+                f"waited {state['sim_time'] - ev.arrival_t:.1f}s",
+                True, TEXT,
+            )
+            scr.blit(
+                info,
+                (WIDTH / 2 - info.get_width() / 2,
+                 bar_y + 12)
+            )
         else:
             t = fonts['small'].render("idle - waiting for events", True, theme.DIM)
-            screen.blit(t, (WIDTH / 2 - t.get_width() / 2,
-                            _EQ_PROCESS_Y + _EQ_PROCESS_H / 2 + 14))
+            scr.blit(
+                t,
+                (WIDTH / 2 - t.get_width() / 2,
+                EQ_PROCESS_Y + EQ_PROCESS_H / 2 + 14)
+            )
 
         # History dots
-        screen.blit(fonts['small'].render("recent", True, theme.DIM),
-                    (WIDTH - 230, _EQ_PROCESS_Y + 6))
+        scr.blit(
+            fonts['small'].render("recent", True, DIM),
+            (WIDTH - 230, EQ_PROCESS_Y + 6)
+        )
         for i, ev in enumerate(state["history"]):
             cx2  = WIDTH - 24 - i * 26
-            cy2  = _EQ_PROCESS_Y + 32
+            cy2  = EQ_PROCESS_Y + 32
             alpha = max(60, 255 - i * 25)
             surf  = pygame.Surface((22, 22), pygame.SRCALPHA)
-            pygame.draw.circle(surf, (*theme.PRIO_COL[ev.priority], alpha),
-                               (11, 11), 9)
-            screen.blit(surf, (cx2 - 11, cy2 - 11))
+            pygame.draw.circle(
+                surf,
+                (*PRIO_COLOUR[ev.priority], alpha),
+                (11, 11),
+                9
+            )
+            scr.blit(
+                surf,
+                (cx2 - 11, cy2 - 11)
+            )
 
         # Status line (top-right)
         avg = state["total_wait"] / state["processed"] if state["processed"] else 0.0
@@ -608,9 +686,12 @@ def _run_event_queue(fonts):
             f"t = {state['sim_time']:6.1f}s   processed {state['processed']}   "
             f"avg wait {avg:.2f}s   speed {state['sim_speed']:.1f}x"
             + ("   [PAUSED]" if not state["running"] else ""),
-            True, theme.TEXT,
+            True, TEXT,
         )
-        screen.blit(info, (WIDTH - info.get_width() - 16, _HEADER_H + 4))
+        scr.blit(
+            info,
+            (WIDTH - info.get_width() - 16, HEADER_HEIGHT + 4)
+        )
 
         for b in btns:
             b.draw(screen, fonts['body'])

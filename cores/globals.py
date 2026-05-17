@@ -56,3 +56,23 @@ PF_CORNER:              int = 4
 PF_FADE_MS:             int = 280
 PF_PATH_REVEAL_MS:      int = 22
 PF_STEPS_PER_FRAME:     int = 2
+
+# Puzzle 2
+EQ_HEAP_Y_BASE:     int     = HEADER_HEIGHT + 30
+EQ_HEAP_H:          int     = 230
+EQ_PROCESS_Y:       int     = EQ_HEAP_Y_BASE + EQ_HEAP_H + 5
+EQ_PROCESS_H:       int     = 150
+EQ_NODE_R:          int     = 18
+EQ_LEVEL_GAP:       int     = 60
+EQ_TOP_MARGIN:      int     = EQ_HEAP_Y_BASE + 25
+EQ_ARRIVAL_MEAN_S:  float   = 1.4
+EQ_SERVICE_MIN_S:   float   = 0.8
+EQ_SERVICE_MAX_S:   float   = 2.5
+EQ_PRIO_NAMES:      list[str | None] = [
+    None,
+    "Critical",
+    "High",
+    "Med",
+    "Low",
+    "Trivial"
+]
