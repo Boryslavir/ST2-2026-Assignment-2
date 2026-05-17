@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 import pygame
-pygame.init()  # must happen before any cores.* import
+pygame.init()
 
 
 from modules.sorting import SortingModule
