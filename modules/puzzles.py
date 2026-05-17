@@ -1,74 +1,46 @@
-def puzzles_module():
-   """
-Puzzles module — three interactive visualisers:
-
-  1. Pathfinding   — A* on a clickable grid
-  2. Event Queue   — priority-heap discrete-event simulator
-  3. DP Grid       — dynamic-programming path counter
-
-Adapted from three reference files that originally depended on a separate
-`ui.theme` module. That dependency has been replaced with a local `_theme`
-namespace and `_Button` helper defined inside this file, so no external
-`ui/` package is needed.
-
-Controls
-    - Main picker:    click a card to enter, ESC to leave puzzles
-    - Inside any puzzle: ESC returns to the picker
-"""
 import pygame
 import heapq
 import math
 import random
 from dataclasses import dataclass, field
 from sys import exit
-from types import SimpleNamespace
-
 from cores.globals import (
+    BG_PANEL,
     CLOCK,
+    DIM,
+    EMPTY_COLOUR,
+    END_COLOUR,
+    END_GLOW,
+    FRONTIER_COLOUR,
+    HEADER_HEIGHT,
     HEIGHT,
-    WIDTH,
+    LINE_PANEL,
+    PATH_COLOUR,
+    PATH_GLOW,
+    PF_CELL,
+    PF_COLS,
+    PF_CORNER,
+    PF_FADE_MS,
+    PF_GRID_H,
+    PF_GRID_W,
+    PF_GRID_X,
+    PF_GRID_Y,
+    PF_PAD,
+    PF_PATH_REVEAL_MS,
+    PF_ROWS,
+    PF_STEPS_PER_FRAME,
+    START_COLOUR,
+    START_GLOW,
+    TEXT,
+    TXT_DANGER,
+    TXT_SUCCESS,
+    VISITED_COLOUR,
+    WALL_COLOUR,
+    WIDTH
 )
 
 
-# =============================================================================
-#                LOCAL THEME (replaces `from ui import theme`)
-# =============================================================================
-
-# Layout
-_HEADER_H = 60
-
-# Palette
-_TEXT          = ( 35,  35,  50)
-_DIM           = (110, 110, 130)
-_EMPTY_COL     = (235, 235, 248)
-_WALL_COL      = ( 60,  60,  80)
-_START_COL     = ( 80, 200, 120)
-_START_GLOW    = (180, 250, 200)
-_END_COL       = (240,  80,  80)
-_END_GLOW      = (255, 180, 180)
-_PATH_COL      = (240, 200,  50)
-_PATH_GLOW     = (255, 245, 200)
-_FRONTIER_COL  = (250, 220, 100)
-_VISITED_COL   = (140, 200, 240)
-_EDGE_COL      = (160, 160, 180)
-_PANEL_BG      = (220, 220, 240)
-_PANEL_LINE    = (150, 150, 180)
-_SUCCESS       = ( 90, 200, 130)
-_DANGER        = (230, 100, 100)
-_WARNING       = (240, 200,  80)
-
-# Priority colours: index 1=Critical .. 5=Trivial
-_PRIO_COL = [
-    (  0,   0,   0),    # 0 unused
-    (230,  80,  80),
-    (240, 150,  80),
-    (240, 220, 100),
-    (100, 200, 150),
-    (120, 170, 220),
-]
-
-
-def _lerp(a, b, t):
+def lerp(a, b, t):
     """Linear-interpolate two RGB tuples by t in [0, 1]."""
     return (
         int(a[0] + (b[0] - a[0]) * t),
@@ -77,37 +49,38 @@ def _lerp(a, b, t):
     )
 
 
-def _make_background():
+def make_background():
     """Vertical gradient backdrop, computed once and reused per frame."""
     surf = pygame.Surface((WIDTH, HEIGHT))
     for y in range(HEIGHT):
         t = y / HEIGHT
-        c = _lerp((248, 248, 255), (215, 220, 245), t)
+        c = lerp((248, 248, 255), (215, 220, 245), t)
         pygame.draw.line(surf, c, (0, y), (WIDTH, y))
     return surf
 
 
-def _screen():
+def screen():
     """Lazily fetch the active pygame display surface."""
     return pygame.display.get_surface()
 
 
-def _draw_header(title: str, subtitle: str, fonts) -> None:
-    pygame.draw.rect(_screen(), _PANEL_BG, (0, 0, WIDTH, _HEADER_H))
-    pygame.draw.line(_screen(), _PANEL_LINE, (0, _HEADER_H), (WIDTH, _HEADER_H), 2)
-    _screen().blit(fonts['title'].render(title, True, _TEXT),  (20, 8))
-    _screen().blit(fonts['small'].render(subtitle, True, _DIM), (20, 38))
+def draw_header(title: str, subtitle: str, fonts) -> None:
+    pygame.draw.rect(screen(), BG_PANEL, (0, 0, WIDTH, HEADER_HEIGHT))
+    pygame.draw.line(screen(), LINE_PANEL, (0, HEADER_HEIGHT), (WIDTH, HEADER_HEIGHT), 2)
+    screen().blit(fonts['title'].render(title, True, TEXT),  (20, 8))
+    screen().blit(fonts['small'].render(subtitle, True, DIM), (20, 38))
 
 
-class _Button:
+class Button:
     """Minimal clickable button with label and optional fill colour."""
 
     def __init__(self, rect, label, callback, color=None):
         self.rect     = pygame.Rect(*rect) if not isinstance(rect, pygame.Rect) else rect
         self.label    = label
         self.callback = callback
-        self.color    = color or _PANEL_LINE
+        self.color    = color or LINE_PANEL
         self._hover   = False
+
 
     def handle(self, event):
         if event.type == pygame.MOUSEMOTION:
@@ -116,49 +89,23 @@ class _Button:
             if self.rect.collidepoint(event.pos):
                 self.callback()
 
+
     def draw(self, surface, font):
-        fill = _lerp(self.color, (255, 255, 255), 0.25) if self._hover else self.color
+        fill = (
+            lerp(self.color, (255, 255, 255), 0.25)
+            if   (self._hover)
+            else (self.color)
+        )
         pygame.draw.rect(surface, fill,  self.rect, border_radius=6)
-        pygame.draw.rect(surface, _TEXT, self.rect, width=1, border_radius=6)
-        text = font.render(self.label, True, _TEXT)
+        pygame.draw.rect(surface, TEXT, self.rect, width=1, border_radius=6)
+        text = font.render(self.label, True, TEXT)
         surface.blit(text, (
             self.rect.centerx - text.get_width()  // 2,
             self.rect.centery - text.get_height() // 2,
         ))
 
 
-# Theme namespace mirroring the original `ui.theme` API the reference files used.
-theme = SimpleNamespace(
-    WIDTH        = WIDTH,
-    HEIGHT       = HEIGHT,
-    HEADER_H     = _HEADER_H,
-    TEXT         = _TEXT,
-    DIM          = _DIM,
-    EMPTY_COL    = _EMPTY_COL,
-    WALL_COL     = _WALL_COL,
-    START_COL    = _START_COL,
-    START_GLOW   = _START_GLOW,
-    END_COL      = _END_COL,
-    END_GLOW     = _END_GLOW,
-    PATH_COL     = _PATH_COL,
-    PATH_GLOW    = _PATH_GLOW,
-    FRONTIER_COL = _FRONTIER_COL,
-    VISITED_COL  = _VISITED_COL,
-    EDGE_COL     = _EDGE_COL,
-    PANEL_BG     = _PANEL_BG,
-    PANEL_LINE   = _PANEL_LINE,
-    SUCCESS      = _SUCCESS,
-    DANGER       = _DANGER,
-    WARNING      = _WARNING,
-    PRIO_COL     = _PRIO_COL,
-    lerp         = _lerp,
-    make_background = _make_background,
-    draw_header     = _draw_header,
-    Button          = _Button,
-)
-
-
-def _build_fonts():
+def build_fonts():
     """Create the fonts dict that the three sub-puzzles expect."""
     return {
         'title': pygame.font.SysFont(name=None, size=32),
@@ -167,47 +114,39 @@ def _build_fonts():
     }
 
 
-# =============================================================================
-#                       PUZZLE 1 — PATHFINDING (A*)
-# =============================================================================
-
-_PF_CELL   = 22
-_PF_COLS   = 28
-_PF_ROWS   = 17
-_PF_GRID_W = _PF_COLS * _PF_CELL
-_PF_GRID_H = _PF_ROWS * _PF_CELL
-_PF_GRID_X = (WIDTH - _PF_GRID_W) // 2
-_PF_GRID_Y = _HEADER_H + 50
-
-_PF_PAD             = 2
-_PF_CORNER          = 4
-_PF_FADE_MS         = 280
-_PF_PATH_REVEAL_MS  = 22
-_PF_STEPS_PER_FRAME = 2
-
-
-def _pf_neighbors(cell, grid):
+def pf_neighbors(cell, grid):
     r, c = cell
     for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
         nr, nc = r + dr, c + dc
-        if 0 <= nr < _PF_ROWS and 0 <= nc < _PF_COLS and grid[nr][nc] != 1:
+        if  (0 <= nr < PF_ROWS) \
+        and (0 <= nc < PF_COLS) \
+        and (grid[nr][nc] != 1):
             yield (nr, nc)
 
 
-def _pf_heuristic(a, b):
+def pf_heuristic(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
-def _run_pathfinding(fonts):
-    screen = _screen()
-    grid   = [[0] * _PF_COLS for _ in range(_PF_ROWS)]
-    state  = {
-        "start": None, "end": None, "mode": "EDIT",
-        "visited": {}, "frontier": {}, "path_list": [], "path_index": {},
+def run_pathfinding(fonts):
+    scr     = screen()
+    grid    = [([0] * PF_COLS) for _ in range(PF_ROWS)]
+    state   = {
+        "start": None,
+        "end": None,
+        "mode": "EDIT",
+        "visited": {},
+        "frontier": {},
+        "path_list": [],
+        "path_index": {},
         "path_reveal_t": 0,
-        "open_heap": [], "came_from": {}, "g_score": {}, "counter": 0,
+        "open_heap": [],
+        "came_from": {},
+        "g_score": {},
+        "counter": 0
     }
-    bg = theme.make_background()
+    bg = make_background()
+
 
     def init_search():
         s, e = state["start"], state["end"]
@@ -215,12 +154,13 @@ def _run_pathfinding(fonts):
         state["came_from"] = {}
         state["g_score"]   = {s: 0}
         state["counter"]   = 0
-        heapq.heappush(state["open_heap"], (_pf_heuristic(s, e), 0, s))
+        heapq.heappush(state["open_heap"], (pf_heuristic(s, e), 0, s))
         now = pygame.time.get_ticks()
         state["visited"]    = {}
         state["frontier"]   = {s: now}
         state["path_list"]  = []
         state["path_index"] = {}
+
 
     def step_search():
         if not state["open_heap"]:
@@ -242,7 +182,7 @@ def _run_pathfinding(fonts):
         now = pygame.time.get_ticks()
         state["visited"][current] = now
         state["frontier"].pop(current, None)
-        for nb in _pf_neighbors(current, grid):
+        for nb in pf_neighbors(current, grid):
             t = state["g_score"][current] + 1
             if nb not in state["g_score"] or t < state["g_score"][nb]:
                 state["came_from"][nb] = current
@@ -250,11 +190,12 @@ def _run_pathfinding(fonts):
                 state["counter"]      += 1
                 heapq.heappush(
                     state["open_heap"],
-                    (t + _pf_heuristic(nb, state["end"]), state["counter"], nb),
+                    (t + pf_heuristic(nb, state["end"]), state["counter"], nb),
                 )
                 if nb not in state["visited"]:
                     state["frontier"][nb] = now
         return False
+
 
     def reset_search():
         state["visited"]    = {}
@@ -263,20 +204,29 @@ def _run_pathfinding(fonts):
         state["path_index"] = {}
         state["mode"]       = "EDIT"
 
+
     def clear_all():
-        for r in range(_PF_ROWS):
-            for c in range(_PF_COLS):
+        for r in range(PF_ROWS):
+            for c in range(PF_COLS):
                 grid[r][c] = 0
         state["start"] = None
         state["end"]   = None
         reset_search()
 
+
     def cell_at(pos):
         x, y = pos
-        if not (_PF_GRID_X <= x < _PF_GRID_X + _PF_GRID_W and
-                _PF_GRID_Y <= y < _PF_GRID_Y + _PF_GRID_H):
+        if not (
+            (PF_GRID_X <= x < (PF_GRID_X + PF_GRID_W)) and
+            (PF_GRID_Y <= y < (PF_GRID_Y + PF_GRID_H))
+        ):
             return None
-        return ((y - _PF_GRID_Y) // _PF_CELL, (x - _PF_GRID_X) // _PF_CELL)
+
+        return (
+            (y - PF_GRID_Y) // PF_CELL,
+            (x - PF_GRID_X) // PF_CELL
+        )
+
 
     def paint(pos, button):
         if state["mode"] != "EDIT":
@@ -297,17 +247,35 @@ def _run_pathfinding(fonts):
             if (r, c) == state["end"]:   state["end"]   = None
             grid[r][c] = 0
 
+
     def start_run():
         if state["mode"] == "EDIT" and state["start"] and state["end"]:
             init_search()
             state["mode"] = "RUNNING"
 
     btns = [
-        theme.Button((40,  555, 90, 36), "RUN",   start_run,   color=theme.SUCCESS),
-        theme.Button((140, 555, 90, 36), "RESET", reset_search),
-        theme.Button((240, 555, 90, 36), "CLEAR", clear_all,   color=theme.DANGER),
-        theme.Button((WIDTH - 100, 555, 80, 36), "BACK",
-                     lambda: state.update(_exit=True)),
+        Button(
+            (40,  555, 90, 36),
+            "RUN",
+            start_run,
+            color=TXT_SUCCESS
+        ),
+        Button(
+            (140, 555, 90, 36),
+            "RESET",
+            reset_search
+        ),
+        Button(
+            (240, 555, 90, 36),
+            "CLEAR",
+            clear_all,
+            color=TXT_DANGER
+        ),
+        Button(
+            (WIDTH - 100, 555, 80, 36),
+            "BACK",
+            lambda: state.update(_exit=True)
+        )
     ]
 
     dragging = False
@@ -335,14 +303,14 @@ def _run_pathfinding(fonts):
             return "menu"
 
         if state["mode"] == "RUNNING":
-            for _ in range(_PF_STEPS_PER_FRAME):
+            for _ in range(PF_STEPS_PER_FRAME):
                 if step_search():
                     break
 
         now = pygame.time.get_ticks()
 
-        screen.blit(bg, (0, 0))
-        theme.draw_header(
+        scr.blit(bg, (0, 0))
+        draw_header(
             "Pathfinding (A*)",
             "L-click: start, end, walls   R-click: erase   SPACE: run   ESC: back",
             fonts,
@@ -354,45 +322,45 @@ def _run_pathfinding(fonts):
             (f"path length {len(state['path_list']) - 1}"
              if state["path_list"] else
              ("no path" if state["mode"] == "DONE" else "")),
-            True, theme.TEXT,
+            True, TEXT,
         )
-        screen.blit(info, (40, _HEADER_H + 15))
+        scr.blit(info, (40, HEADER_HEIGHT + 15))
 
         # Draw cells
         path_index = state["path_index"]
-        for r in range(_PF_ROWS):
-            for c in range(_PF_COLS):
+        for r in range(PF_ROWS):
+            for c in range(PF_COLS):
                 rect = pygame.Rect(
-                    _PF_GRID_X + c * _PF_CELL + _PF_PAD,
-                    _PF_GRID_Y + r * _PF_CELL + _PF_PAD,
-                    _PF_CELL - 2 * _PF_PAD,
-                    _PF_CELL - 2 * _PF_PAD,
+                    (PF_GRID_X + (c * PF_CELL) + PF_PAD),
+                    (PF_GRID_Y + (r * PF_CELL) + PF_PAD),
+                    (PF_CELL - 2 * PF_PAD),
+                    (PF_CELL - 2 * PF_PAD),
                 )
                 pos  = (r, c)
                 base = grid[r][c]
 
-                color = theme.EMPTY_COL
+                color = EMPTY_COLOUR
                 if state["path_list"] and pos in path_index:
                     elapsed = now - state["path_reveal_t"]
-                    if path_index[pos] * _PF_PATH_REVEAL_MS <= elapsed:
+                    if path_index[pos] * PF_PATH_REVEAL_MS <= elapsed:
                         pulse = (math.sin(now / 250 + path_index[pos] * 0.3) + 1) * 0.5
-                        color = theme.lerp(theme.PATH_COL, theme.PATH_GLOW, pulse * 0.4)
+                        color = lerp(PATH_COLOUR, PATH_GLOW, pulse * 0.4)
                 elif base == 2:
                     pulse = (math.sin(now / 280) + 1) * 0.5
-                    color = theme.lerp(theme.START_COL, theme.START_GLOW, pulse * 0.5)
+                    color = lerp(START_COLOUR, START_GLOW, pulse * 0.5)
                 elif base == 3:
                     pulse = (math.sin(now / 280 + 1.5) + 1) * 0.5
-                    color = theme.lerp(theme.END_COL, theme.END_GLOW, pulse * 0.5)
+                    color = lerp(END_COLOUR, END_GLOW, pulse * 0.5)
                 elif base == 1:
-                    color = theme.WALL_COL
+                    color = WALL_COLOUR
                 elif pos in state["visited"]:
-                    t = min(1.0, (now - state["visited"][pos]) / _PF_FADE_MS)
-                    color = theme.lerp(theme.FRONTIER_COL, theme.VISITED_COL, t)
+                    t = min(1.0, (now - state["visited"][pos]) / PF_FADE_MS)
+                    color = lerp(FRONTIER_COLOUR, VISITED_COLOUR, t)
                 elif pos in state["frontier"]:
-                    t = min(1.0, (now - state["frontier"][pos]) / _PF_FADE_MS)
-                    color = theme.lerp(theme.EMPTY_COL, theme.FRONTIER_COL, t)
+                    t = min(1.0, (now - state["frontier"][pos]) / PF_FADE_MS)
+                    color = lerp(EMPTY_COLOUR, FRONTIER_COLOUR, t)
 
-                pygame.draw.rect(screen, color, rect, border_radius=_PF_CORNER)
+                pygame.draw.rect(scr, color, rect, border_radius=PF_CORNER)
 
         for b in btns:
             b.draw(screen, fonts['body'])
@@ -896,10 +864,6 @@ def _run_dp_grid(fonts):
         CLOCK.tick(60)
 
 
-# =============================================================================
-#                       TOP-LEVEL PICKER + ENTRY POINT
-# =============================================================================
-
 def _run_picker(fonts):
     """Cards-style picker. Click one to enter that puzzle. ESC to exit."""
     screen = _screen()
@@ -984,11 +948,20 @@ def _run_picker(fonts):
 
 def puzzles_module() -> None:
     """
-    Entry point used by `cores/setup.py`:
-        from modules.puzzles import puzzles_module
-        puzzles_module()
+    Puzzles module — three interactive visualisers:
 
-    Flow:  main menu --> picker --> sub-puzzle --(ESC)--> main menu
+    1. Pathfinding   — A* on a clickable grid
+    2. Event Queue   — priority-heap discrete-event simulator
+    3. DP Grid       — dynamic-programming path counter
+
+    Adapted from three reference files that originally depended on a separate
+    `ui.theme` module. That dependency has been replaced with a local `_theme`
+    namespace and `_Button` helper defined inside this file, so no external
+    `ui/` package is needed.
+
+    Controls
+        - Main picker:    click a card to enter, ESC to leave puzzles
+        - Inside any puzzle: ESC returns to the picker
     """
     fonts  = _build_fonts()
     choice = _run_picker(fonts)
@@ -999,12 +972,16 @@ def puzzles_module() -> None:
         pygame.quit()
         exit()
 
-    if   choice == "pathfinding": result = _run_pathfinding(fonts)
-    elif choice == "event_queue": result = _run_event_queue(fonts)
-    elif choice == "dp_grid":     result = _run_dp_grid(fonts)
-    else:                          result = "menu"
+    if choice == "pathfinding":
+       result = _run_pathfinding(fonts)
+    elif choice == "event_queue":
+       result = _run_event_queue(fonts)
+    elif choice == "dp_grid":
+       result = _run_dp_grid(fonts)
+    else:
+        result = "menu"
 
     if result == "quit":
+        # ESC in a sub-puzzle returns straight to the main menu (single key press).
         pygame.quit()
         exit()
-    # ESC in a sub-puzzle returns straight to the main menu (single key press).
