@@ -1,4 +1,3 @@
-
 import os
 import sys
 import unittest
@@ -29,9 +28,15 @@ from modules.puzzles import (
     _eq_lerp_xy,
     EQEvent,
     Button,
-    build_fonts,
+    build_fonts
 )
-from cores.globals import PF_ROWS, PF_COLS, DP_ROWS, DP_COLS, EQ_TOP_MARGIN
+from cores.globals import (
+    PF_ROWS,
+    PF_COLS,
+    DP_ROWS,
+    DP_COLS,
+    EQ_TOP_MARGIN
+)
 
 
 class TestLerp(unittest.TestCase):
